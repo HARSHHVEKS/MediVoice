@@ -1,19 +1,68 @@
 import 'package:flutter/material.dart';
-import 'core/theme/app_theme.dart';
-import 'screens/home_screen.dart';
+import 'package:flutter/services.dart';
 
-void main() {
+import 'core/database/database_helper.dart';
+import 'core/theme/app_theme.dart';
+import 'features/auth/screens/admin_login_screen.dart';
+import 'features/auth/screens/role_selection_screen.dart';
+import 'features/caregiver/screens/add_patient_screen.dart';
+import 'features/caregiver/screens/caregiver_profiles_screen.dart';
+import 'features/patient/screens/patient_home_screen.dart';
+import 'features/splash/splash_screen.dart';
+
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+
+  // Lock to portrait only
+  await SystemChrome.setPreferredOrientations([
+    DeviceOrientation.portraitUp,
+    DeviceOrientation.portraitDown,
+  ]);
+
+  // Initialize database on startup
+  final dbWorking = await DatabaseHelper.instance.isDatabaseWorking();
+  debugPrint(dbWorking
+      ? '✅ DATABASE: Ready!'
+      : '❌ DATABASE: Something went wrong!');
+
   runApp(const MediVoiceApp());
 }
 
 class MediVoiceApp extends StatelessWidget {
-  const MediVoiceApp({Key? key}) : super(key: key);
+  const MediVoiceApp({super.key});
 
   @override
   Widget build(BuildContext context) => MaterialApp(
       title: 'MediVoice',
       theme: AppTheme.lightTheme,
-      home: const HomeScreen(),
       debugShowCheckedModeBanner: false,
+      initialRoute: '/',
+      routes: {
+        // ── Core ──────────────────────────────────────
+        '/': (context) => const SplashScreen(),
+        '/role-selection': (context) => const RoleSelectionScreen(),
+
+        // ── Admin ──────────────────────────────────────
+        '/admin-login': (context) => const AdminLoginScreen(),
+
+        '/caregiver-profiles': (context) => const CaregiverProfilesScreen(),
+
+        '/add-patient': (context) => const AddPatientScreen(),
+
+
+
+        '/patient-home': (context) => const PatientHomeScreen(),
+
+
+
+
+        // ── Coming Soon ────────────────────────────────
+        // '/patient-home':        Step 8
+        // '/caregiver-profiles':  Step 8
+        // '/add-patient':         Step 9
+        // '/add-medication':      Step 10
+        // '/record-audio':        Step 11
+        // '/dose-confirmation':   Step 12
+      },
     );
 }

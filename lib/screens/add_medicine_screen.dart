@@ -4,9 +4,8 @@ import '../models/medicine.dart';
 class AddMedicineScreen extends StatefulWidget {
 
   const AddMedicineScreen({
-    Key? key,
-    required this.onMedicineAdded,
-  }) : super(key: key);
+    required this.onMedicineAdded, super.key,
+  });
   final Function(Medicine) onMedicineAdded;
 
   @override
