@@ -7,14 +7,14 @@ import '../../../core/constants/app_dimensions.dart';
 import '../../../core/database/database_helper.dart';
 import '../../../core/database/db_constants.dart';
 import 'add_medication_screen.dart';
+import 'dose_history_screen.dart'; 
 
 class MedicationListScreen extends StatefulWidget {
-  final Map<String, dynamic> patient;
 
   const MedicationListScreen({
-    Key? key,
-    required this.patient,
-  }) : super(key: key);
+    required this.patient, super.key,
+  });
+  final Map<String, dynamic> patient;
 
   @override
   State<MedicationListScreen> createState() =>
@@ -23,11 +23,9 @@ class MedicationListScreen extends StatefulWidget {
 
 class _MedicationListScreenState
     extends State<MedicationListScreen> {
-  // ── State ─────────────────────────────────────────────
   List<Map<String, dynamic>> _medications = [];
   bool _isLoading = true;
 
-  // ── Database ──────────────────────────────────────────
   final _db = DatabaseHelper.instance;
 
   @override
@@ -36,27 +34,28 @@ class _MedicationListScreenState
     _loadMedications();
   }
 
-  // ── Load medications ──────────────────────────────────
   Future<void> _loadMedications() async {
     try {
       setState(() => _isLoading = true);
       final patientId =
           widget.patient[DBConstants.patientId] as int;
-      final meds = await _db.getMedicationsByPatient(patientId);
+      final meds =
+          await _db.getMedicationsByPatient(patientId);
       if (!mounted) return;
       setState(() {
         _medications = meds;
         _isLoading = false;
       });
-      debugPrint('✅ MEDS: Loaded ${meds.length} medications');
+      debugPrint(
+          '✅ MEDS: Loaded ${meds.length} medications');
     } catch (e) {
       debugPrint('❌ LOAD MEDS ERROR: $e');
       setState(() => _isLoading = false);
     }
   }
 
-  // ── Delete medication ─────────────────────────────────
-  Future<void> _deleteMedication(int medId, String name) async {
+  Future<void> _deleteMedication(
+      int medId, String name) async {
     final confirm = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
@@ -116,11 +115,10 @@ class _MedicationListScreenState
       debugPrint('❌ DELETE MED ERROR: $e');
     }
   }
-
-  @override
+    @override
   Widget build(BuildContext context) {
-    final name =
-        widget.patient[DBConstants.patientFullName] as String;
+    final name = widget.patient[DBConstants.patientFullName]
+        as String;
     final initial = name.isNotEmpty
         ? name.substring(0, 1).toUpperCase()
         : '?';
@@ -140,10 +138,7 @@ class _MedicationListScreenState
         child: SafeArea(
           child: Column(
             children: [
-              // ── Top Bar ────────────────────────────
               _buildTopBar(name, initial),
-
-              // ── Content ────────────────────────────
               Expanded(
                 child: Container(
                   decoration: const BoxDecoration(
@@ -168,15 +163,13 @@ class _MedicationListScreenState
           ),
         ),
       ),
-
-      // ── FAB ──────────────────────────────────────────
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () => Navigator.push(
           context,
           MaterialPageRoute(
             builder: (_) => AddMedicationScreen(
-              patientId:
-                  widget.patient[DBConstants.patientId] as int,
+              patientId: widget.patient[
+                  DBConstants.patientId] as int,
               patientName: name,
             ),
           ),
@@ -196,7 +189,6 @@ class _MedicationListScreenState
     );
   }
 
-  // ── Top Bar ───────────────────────────────────────────
   Widget _buildTopBar(String name, String initial) {
     final photoPath =
         widget.patient[DBConstants.patientPhoto] as String?;
@@ -215,8 +207,6 @@ class _MedicationListScreenState
             ),
             onPressed: () => Navigator.pop(context),
           ),
-
-          // Patient avatar
           Container(
             width: 48,
             height: 48,
@@ -248,10 +238,7 @@ class _MedicationListScreenState
                   )
                 : null,
           ),
-
           const SizedBox(width: AppDimensions.sm),
-
-          // Patient info
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -269,7 +256,8 @@ class _MedicationListScreenState
                 Text(
                   [
                     if (age != null) '$age yrs',
-                    if (ward != null && ward.isNotEmpty) ward,
+                    if (ward != null && ward.isNotEmpty)
+                      ward,
                   ].join(' • '),
                   style: TextStyle(
                     fontFamily: 'Poppins',
@@ -280,8 +268,6 @@ class _MedicationListScreenState
               ],
             ),
           ),
-
-          // Med count badge
           Container(
             padding: const EdgeInsets.symmetric(
               horizontal: 12,
@@ -306,89 +292,93 @@ class _MedicationListScreenState
     );
   }
 
-  // ── Empty State ───────────────────────────────────────
-  Widget _buildEmptyState() {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(AppDimensions.xl),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Container(
-              width: 100,
-              height: 100,
-              decoration: BoxDecoration(
-                color: AppColors.primaryBlue.withOpacity(0.08),
-                borderRadius: BorderRadius.circular(50),
+  Widget _buildEmptyState() => Center(
+        child: Padding(
+          padding: const EdgeInsets.all(AppDimensions.xl),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Container(
+                width: 100,
+                height: 100,
+                decoration: BoxDecoration(
+                  color: AppColors.primaryBlue
+                      .withOpacity(0.08),
+                  borderRadius: BorderRadius.circular(50),
+                ),
+                child: const Icon(
+                  Icons.medication_outlined,
+                  size: 52,
+                  color: AppColors.primaryBlue,
+                ),
               ),
-              child: const Icon(
-                Icons.medication_outlined,
-                size: 52,
-                color: AppColors.primaryBlue,
+              const SizedBox(height: AppDimensions.lg),
+              const Text(
+                'No Medicines Yet',
+                style: TextStyle(
+                  fontFamily: 'Poppins',
+                  fontSize: 22,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.textPrimary,
+                ),
               ),
-            ),
-            const SizedBox(height: AppDimensions.lg),
-            const Text(
-              'No Medicines Yet',
-              style: TextStyle(
-                fontFamily: 'Poppins',
-                fontSize: 22,
-                fontWeight: FontWeight.w700,
-                color: AppColors.textPrimary,
+              const SizedBox(height: AppDimensions.sm),
+              const Text(
+                'Tap "Add Medicine" below\nto add this patient\'s first medicine.',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontFamily: 'Poppins',
+                  fontSize: 15,
+                  color: AppColors.textSecondary,
+                  height: 1.6,
+                ),
               ),
-            ),
-            const SizedBox(height: AppDimensions.sm),
-            Text(
-              'Tap "Add Medicine" below\nto add this patient\'s first medicine.',
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                fontFamily: 'Poppins',
-                fontSize: 15,
-                color: AppColors.textSecondary,
-                height: 1.6,
-              ),
-            ),
-          ],
+            ],
+          ),
         ),
-      ),
-    );
-  }
+      );
 
-  // ── Medicine List ─────────────────────────────────────
-  Widget _buildMedList() {
-    return ListView.builder(
-      padding: const EdgeInsets.fromLTRB(
-        AppDimensions.md,
-        AppDimensions.lg,
-        AppDimensions.md,
-        100,
-      ),
-      itemCount: _medications.length,
-      itemBuilder: (context, index) =>
-          _buildMedCard(_medications[index]),
-    );
-  }
+  Widget _buildMedList() => ListView.builder(
+        padding: const EdgeInsets.fromLTRB(
+          AppDimensions.md,
+          AppDimensions.lg,
+          AppDimensions.md,
+          100,
+        ),
+        itemCount: _medications.length,
+        itemBuilder: (context, index) =>
+            _buildMedCard(_medications[index]),
+      );
 
-  // ── Medicine Card ─────────────────────────────────────
   Widget _buildMedCard(Map<String, dynamic> med) {
     final medId = med[DBConstants.medId] as int;
     final name = med[DBConstants.medName] as String;
     final dosage = med[DBConstants.medDosage] as String;
     final unit = med[DBConstants.medDosageUnit] as String;
-    final frequency = med[DBConstants.medFrequency] as String;
-    final colorName = med[DBConstants.medPillColor] as String?;
-    final shape = med[DBConstants.medPillShape] as String?;
-    final photoPath = med[DBConstants.medPillPhoto] as String?;
-    final hasAudio = (med[DBConstants.medAudioPath] as String?)
-            ?.isNotEmpty ==
-        true;
+    final frequency =
+        med[DBConstants.medFrequency] as String;
+    final colorName =
+        med[DBConstants.medPillColor] as String?;
+    final shape =
+        med[DBConstants.medPillShape] as String?;
+    final photoPath =
+        med[DBConstants.medPillPhoto] as String?;
+    final hasAudio =
+        (med[DBConstants.medAudioPath] as String?)
+                ?.isNotEmpty ==
+            true;
     final instructions =
         med[DBConstants.medInstructions] as String?;
-
     final pillColor = _getPillColor(colorName);
+    final patientId =
+        widget.patient[DBConstants.patientId] as int;
+    final patientName =
+        widget.patient[DBConstants.patientFullName]
+            as String;
 
     return Container(
-      margin: const EdgeInsets.only(bottom: AppDimensions.md),
+      margin:
+          const EdgeInsets.only(bottom: AppDimensions.md),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius:
@@ -403,60 +393,60 @@ class _MedicationListScreenState
       ),
       child: Padding(
         padding: const EdgeInsets.all(AppDimensions.md),
-        child: Row(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // ── Pill Visual ───────────────────────────
-            _buildPillVisual(
-              photoPath: photoPath,
-              shape: shape,
-              color: pillColor,
-              colorName: colorName,
-            ),
 
-            const SizedBox(width: AppDimensions.md),
-
-            // ── Info ──────────────────────────────────
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    name,
-                    style: const TextStyle(
-                      fontFamily: 'Poppins',
-                      fontSize: 16,
-                      fontWeight: FontWeight.w700,
-                      color: AppColors.textPrimary,
-                    ),
-                  ),
-                  const SizedBox(height: 3),
-                  Text(
-                    '$dosage $unit • $frequency',
-                    style: const TextStyle(
-                      fontFamily: 'Poppins',
-                      fontSize: 13,
-                      color: AppColors.textSecondary,
-                    ),
-                  ),
-                  if (instructions != null &&
-                      instructions.isNotEmpty) ...[
-                    const SizedBox(height: 3),
-                    Text(
-                      instructions,
-                      style: const TextStyle(
-                        fontFamily: 'Poppins',
-                        fontSize: 12,
-                        color: AppColors.textSecondary,
-                        fontStyle: FontStyle.italic,
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ],
-                  const SizedBox(height: 6),
-                  // Audio badge
-                  Row(
+            // ── Top row: pill + info + actions ──────
+            Row(
+              children: [
+                _buildPillVisual(
+                  photoPath: photoPath,
+                  shape: shape,
+                  color: pillColor,
+                  colorName: colorName,
+                ),
+                const SizedBox(width: AppDimensions.md),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment:
+                        CrossAxisAlignment.start,
                     children: [
+                      Text(
+                        name,
+                        style: const TextStyle(
+                          fontFamily: 'Poppins',
+                          fontSize: 16,
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.textPrimary,
+                        ),
+                      ),
+                      const SizedBox(height: 3),
+                      Text(
+                        '$dosage $unit • $frequency',
+                        style: const TextStyle(
+                          fontFamily: 'Poppins',
+                          fontSize: 13,
+                          color: AppColors.textSecondary,
+                        ),
+                      ),
+                      if (instructions != null &&
+                          instructions.isNotEmpty) ...[
+                        const SizedBox(height: 3),
+                        Text(
+                          instructions,
+                          style: const TextStyle(
+                            fontFamily: 'Poppins',
+                            fontSize: 12,
+                            color: AppColors.textSecondary,
+                            fontStyle: FontStyle.italic,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ],
+                      const SizedBox(height: 6),
+                      // Audio badge
                       Container(
                         padding: const EdgeInsets.symmetric(
                           horizontal: 8,
@@ -507,42 +497,79 @@ class _MedicationListScreenState
                       ),
                     ],
                   ),
-                ],
-              ),
-            ),
-
-            // ── Actions ───────────────────────────────
-            Column(
-              children: [
-                IconButton(
-                  icon: const Icon(
-                    Icons.edit_outlined,
-                    color: AppColors.primaryBlue,
-                    size: 20,
-                  ),
-                  onPressed: () => Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => AddMedicationScreen(
-                        patientId: widget.patient[
-                            DBConstants.patientId] as int,
-                        patientName: widget.patient[
-                            DBConstants.patientFullName] as String,
-                        existingMedication: med,
-                      ),
-                    ),
-                  ).then((_) => _loadMedications()),
                 ),
-                IconButton(
-                  icon: const Icon(
-                    Icons.delete_outline,
-                    color: AppColors.dangerRed,
-                    size: 20,
-                  ),
-                  onPressed: () =>
-                      _deleteMedication(medId, name),
+
+                // Edit + Delete buttons
+                Column(
+                  children: [
+                    IconButton(
+                      icon: const Icon(
+                        Icons.edit_outlined,
+                        color: AppColors.primaryBlue,
+                        size: 20,
+                      ),
+                      onPressed: () => Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) =>
+                              AddMedicationScreen(
+                            patientId: patientId,
+                            patientName: patientName,
+                            existingMedication: med,
+                          ),
+                        ),
+                      ).then((_) => _loadMedications()),
+                    ),
+                    IconButton(
+                      icon: const Icon(
+                        Icons.delete_outline,
+                        color: AppColors.dangerRed,
+                        size: 20,
+                      ),
+                      onPressed: () =>
+                          _deleteMedication(medId, name),
+                    ),
+                  ],
                 ),
               ],
+            ),
+
+            // ── History button row ───────────────────
+            const SizedBox(height: AppDimensions.sm),
+            const Divider(height: 1),
+            const SizedBox(height: 4),
+            TextButton.icon(
+              onPressed: () => Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => DoseHistoryScreen(
+                    patientId: patientId,
+                    patientName: patientName,
+                    medicationName: name,
+                    medicationId: medId,
+                  ),
+                ),
+              ),
+              icon: const Icon(
+                Icons.history,
+                size: 16,
+                color: AppColors.primaryBlue,
+              ),
+              label: const Text(
+                'View Dose History',
+                style: TextStyle(
+                  fontFamily: 'Poppins',
+                  fontSize: 13,
+                  color: AppColors.primaryBlue,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              style: TextButton.styleFrom(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 8,
+                  vertical: 4,
+                ),
+              ),
             ),
           ],
         ),
@@ -550,14 +577,12 @@ class _MedicationListScreenState
     );
   }
 
-  // ── Pill Visual ───────────────────────────────────────
   Widget _buildPillVisual({
     required String? photoPath,
     required String? shape,
     required Color color,
     required String? colorName,
   }) {
-    // If photo exists — show it
     if (photoPath != null && photoPath.isNotEmpty) {
       return Container(
         width: 64,
@@ -571,59 +596,46 @@ class _MedicationListScreenState
         ),
       );
     }
-
-    // No photo — show animated shape
     return _AnimatedPillWidget(
       shape: shape ?? 'tablet',
       color: color,
     );
   }
 
-  // ── Get pill color ────────────────────────────────────
   Color _getPillColor(String? colorName) {
     switch (colorName?.toLowerCase()) {
-      case 'red':
-        return AppColors.pillRed;
-      case 'blue':
-        return AppColors.pillBlue;
-      case 'green':
-        return AppColors.pillGreen;
-      case 'yellow':
-        return AppColors.pillYellow;
-      case 'orange':
-        return AppColors.pillOrange;
-      case 'purple':
-        return AppColors.pillPurple;
-      case 'pink':
-        return AppColors.pillPink;
-      case 'white':
-        return AppColors.pillWhite;
-      case 'brown':
-        return AppColors.pillBrown;
-      default:
-        return AppColors.primaryBlue;
+      case 'red':    return AppColors.pillRed;
+      case 'blue':   return AppColors.pillBlue;
+      case 'green':  return AppColors.pillGreen;
+      case 'yellow': return AppColors.pillYellow;
+      case 'orange': return AppColors.pillOrange;
+      case 'purple': return AppColors.pillPurple;
+      case 'pink':   return AppColors.pillPink;
+      case 'white':  return AppColors.pillWhite;
+      case 'brown':  return AppColors.pillBrown;
+      default:       return AppColors.primaryBlue;
     }
   }
 }
 
 // ══════════════════════════════════════════════════════════
-// Animated Pill Widget — Pure Flutter, no packages
+// Animated Pill Widget + all shape classes — UNCHANGED
 // ══════════════════════════════════════════════════════════
 class _AnimatedPillWidget extends StatefulWidget {
-  final String shape;
-  final Color color;
-
   const _AnimatedPillWidget({
     required this.shape,
     required this.color,
   });
+  final String shape;
+  final Color color;
 
   @override
   State<_AnimatedPillWidget> createState() =>
       _AnimatedPillWidgetState();
 }
 
-class _AnimatedPillWidgetState extends State<_AnimatedPillWidget>
+class _AnimatedPillWidgetState
+    extends State<_AnimatedPillWidget>
     with SingleTickerProviderStateMixin {
   late AnimationController _controller;
   late Animation<double> _floatAnimation;
@@ -635,16 +647,11 @@ class _AnimatedPillWidgetState extends State<_AnimatedPillWidget>
       vsync: this,
       duration: const Duration(milliseconds: 2000),
     )..repeat(reverse: true);
-
-    _floatAnimation = Tween<double>(
-      begin: -3,
-      end: 3,
-    ).animate(
-      CurvedAnimation(
-        parent: _controller,
-        curve: Curves.easeInOut,
-      ),
-    );
+    _floatAnimation = Tween<double>(begin: -3, end: 3)
+        .animate(CurvedAnimation(
+      parent: _controller,
+      curve: Curves.easeInOut,
+    ));
   }
 
   @override
@@ -654,177 +661,125 @@ class _AnimatedPillWidgetState extends State<_AnimatedPillWidget>
   }
 
   @override
-  Widget build(BuildContext context) {
-    return AnimatedBuilder(
-      animation: _floatAnimation,
-      builder: (context, child) => Transform.translate(
-        offset: Offset(0, _floatAnimation.value),
-        child: child,
-      ),
-      child: Container(
-        width: 64,
-        height: 64,
-        decoration: BoxDecoration(
-          color: widget.color.withOpacity(0.12),
-          borderRadius: BorderRadius.circular(12),
+  Widget build(BuildContext context) => AnimatedBuilder(
+        animation: _floatAnimation,
+        builder: (context, child) => Transform.translate(
+          offset: Offset(0, _floatAnimation.value),
+          child: child,
         ),
-        child: Center(
-          child: _buildShape(),
+        child: Container(
+          width: 64,
+          height: 64,
+          decoration: BoxDecoration(
+            color: widget.color.withOpacity(0.12),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Center(child: _buildShape()),
         ),
-      ),
-    );
-  }
+      );
 
   Widget _buildShape() {
     switch (widget.shape.toLowerCase()) {
-      case 'capsule':
-        return _CapsuleShape(color: widget.color);
+      case 'capsule':   return _CapsuleShape(color: widget.color);
       case 'syrup':
-      case 'liquid':
-        return _BottleShape(color: widget.color);
-      case 'drops':
-        return _DropsShape(color: widget.color);
-      case 'inhaler':
-        return _InhalerShape(color: widget.color);
-      case 'injection':
-        return _InjectionShape(color: widget.color);
-      case 'patch':
-        return _PatchShape(color: widget.color);
+      case 'liquid':    return _BottleShape(color: widget.color);
+      case 'drops':     return _DropsShape(color: widget.color);
+      case 'inhaler':   return _InhalerShape(color: widget.color);
+      case 'injection': return _InjectionShape(color: widget.color);
+      case 'patch':     return _PatchShape(color: widget.color);
       case 'tablet':
-      default:
-        return _TabletShape(color: widget.color);
+      default:          return _TabletShape(color: widget.color);
     }
   }
 }
 
-// ── Tablet Shape ──────────────────────────────────────────
 class _TabletShape extends StatelessWidget {
-  final Color color;
   const _TabletShape({required this.color});
-
+  final Color color;
   @override
   Widget build(BuildContext context) => Container(
-        width: 36,
-        height: 36,
+        width: 36, height: 36,
         decoration: BoxDecoration(
           color: color,
           shape: BoxShape.circle,
-          boxShadow: [
-            BoxShadow(
-              color: color.withOpacity(0.4),
-              blurRadius: 6,
-              offset: const Offset(0, 2),
-            ),
-          ],
+          boxShadow: [BoxShadow(
+            color: color.withOpacity(0.4),
+            blurRadius: 6, offset: const Offset(0, 2),
+          )],
         ),
-        child: Center(
-          child: Container(
-            width: 24,
-            height: 2,
-            color: Colors.white.withOpacity(0.6),
-          ),
-        ),
+        child: Center(child: Container(
+          width: 24, height: 2,
+          color: Colors.white.withOpacity(0.6),
+        )),
       );
 }
 
-// ── Capsule Shape ─────────────────────────────────────────
 class _CapsuleShape extends StatelessWidget {
-  final Color color;
   const _CapsuleShape({required this.color});
-
+  final Color color;
   @override
   Widget build(BuildContext context) => Container(
-        width: 40,
-        height: 20,
+        width: 40, height: 20,
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(10),
-          boxShadow: [
-            BoxShadow(
-              color: color.withOpacity(0.4),
-              blurRadius: 6,
-              offset: const Offset(0, 2),
-            ),
-          ],
+          boxShadow: [BoxShadow(
+            color: color.withOpacity(0.4),
+            blurRadius: 6, offset: const Offset(0, 2),
+          )],
         ),
-        child: Row(
-          children: [
-            Expanded(
-              child: Container(
-                decoration: BoxDecoration(
-                  color: color,
-                  borderRadius: const BorderRadius.only(
-                    topLeft: Radius.circular(10),
-                    bottomLeft: Radius.circular(10),
-                  ),
-                ),
-              ),
+        child: Row(children: [
+          Expanded(child: Container(decoration: BoxDecoration(
+            color: color,
+            borderRadius: const BorderRadius.only(
+              topLeft: Radius.circular(10),
+              bottomLeft: Radius.circular(10),
             ),
-            Expanded(
-              child: Container(
-                decoration: BoxDecoration(
-                  color: color.withOpacity(0.5),
-                  borderRadius: const BorderRadius.only(
-                    topRight: Radius.circular(10),
-                    bottomRight: Radius.circular(10),
-                  ),
-                ),
-              ),
+          ))),
+          Expanded(child: Container(decoration: BoxDecoration(
+            color: color.withOpacity(0.5),
+            borderRadius: const BorderRadius.only(
+              topRight: Radius.circular(10),
+              bottomRight: Radius.circular(10),
             ),
-          ],
-        ),
+          ))),
+        ]),
       );
 }
 
-// ── Bottle Shape (Syrup) ──────────────────────────────────
 class _BottleShape extends StatelessWidget {
-  final Color color;
   const _BottleShape({required this.color});
-
+  final Color color;
   @override
   Widget build(BuildContext context) => Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Container(
-            width: 12,
-            height: 8,
+          Container(width: 12, height: 8,
             decoration: BoxDecoration(
               color: color,
               borderRadius: BorderRadius.circular(2),
-            ),
-          ),
-          Container(
-            width: 28,
-            height: 32,
+            )),
+          Container(width: 28, height: 32,
             decoration: BoxDecoration(
               color: color.withOpacity(0.8),
               borderRadius: BorderRadius.circular(6),
-              boxShadow: [
-                BoxShadow(
-                  color: color.withOpacity(0.3),
-                  blurRadius: 6,
-                  offset: const Offset(0, 2),
-                ),
-              ],
+              boxShadow: [BoxShadow(
+                color: color.withOpacity(0.3),
+                blurRadius: 6, offset: const Offset(0, 2),
+              )],
             ),
-            child: Padding(
-              padding: const EdgeInsets.all(4),
-              child: Container(
-                decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.3),
-                  borderRadius: BorderRadius.circular(4),
-                ),
-              ),
-            ),
-          ),
+            child: Padding(padding: const EdgeInsets.all(4),
+              child: Container(decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.3),
+                borderRadius: BorderRadius.circular(4),
+              )),
+            )),
         ],
       );
 }
 
-// ── Drops Shape ───────────────────────────────────────────
 class _DropsShape extends StatelessWidget {
-  final Color color;
   const _DropsShape({required this.color});
-
+  final Color color;
   @override
   Widget build(BuildContext context) => CustomPaint(
         size: const Size(28, 38),
@@ -833,149 +788,102 @@ class _DropsShape extends StatelessWidget {
 }
 
 class _DropPainter extends CustomPainter {
-  final Color color;
   _DropPainter({required this.color});
-
+  final Color color;
   @override
   void paint(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..color = color
-      ..style = PaintingStyle.fill;
-
+    final paint = Paint()..color = color..style = PaintingStyle.fill;
     final path = Path();
     path.moveTo(size.width / 2, 0);
-    path.quadraticBezierTo(
-        size.width, size.height * 0.5, size.width / 2, size.height);
-    path.quadraticBezierTo(
-        0, size.height * 0.5, size.width / 2, 0);
-
+    path.quadraticBezierTo(size.width, size.height * 0.5, size.width / 2, size.height);
+    path.quadraticBezierTo(0, size.height * 0.5, size.width / 2, 0);
     canvas.drawPath(path, paint);
-
-    final highlightPaint = Paint()
-      ..color = Colors.white.withOpacity(0.4)
-      ..style = PaintingStyle.fill;
     canvas.drawCircle(
-      Offset(size.width * 0.35, size.height * 0.35),
-      4,
-      highlightPaint,
+      Offset(size.width * 0.35, size.height * 0.35), 4,
+      Paint()..color = Colors.white.withOpacity(0.4)..style = PaintingStyle.fill,
     );
   }
-
   @override
   bool shouldRepaint(_DropPainter old) => old.color != color;
 }
 
-// ── Inhaler Shape ─────────────────────────────────────────
 class _InhalerShape extends StatelessWidget {
-  final Color color;
   const _InhalerShape({required this.color});
-
+  final Color color;
   @override
   Widget build(BuildContext context) => Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Container(
-            width: 10,
-            height: 6,
+          Container(width: 10, height: 6,
             decoration: BoxDecoration(
               color: color.withOpacity(0.6),
               borderRadius: BorderRadius.circular(3),
-            ),
-          ),
-          Container(
-            width: 24,
-            height: 30,
+            )),
+          Container(width: 24, height: 30,
             decoration: BoxDecoration(
               color: color,
               borderRadius: BorderRadius.circular(8),
-              boxShadow: [
-                BoxShadow(
-                  color: color.withOpacity(0.3),
-                  blurRadius: 6,
-                  offset: const Offset(0, 2),
-                ),
-              ],
-            ),
-          ),
+              boxShadow: [BoxShadow(
+                color: color.withOpacity(0.3),
+                blurRadius: 6, offset: const Offset(0, 2),
+              )],
+            )),
         ],
       );
 }
 
-// ── Injection Shape ───────────────────────────────────────
 class _InjectionShape extends StatelessWidget {
-  final Color color;
   const _InjectionShape({required this.color});
-
+  final Color color;
   @override
   Widget build(BuildContext context) => Transform.rotate(
         angle: -0.5,
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              width: 4,
-              height: 4,
-              decoration: BoxDecoration(
-                color: Colors.grey.shade400,
-                borderRadius: BorderRadius.circular(2),
-              ),
+        child: Row(mainAxisSize: MainAxisSize.min, children: [
+          Container(width: 4, height: 4,
+            decoration: BoxDecoration(
+              color: Colors.grey.shade400,
+              borderRadius: BorderRadius.circular(2),
+            )),
+          Container(width: 28, height: 12,
+            decoration: BoxDecoration(
+              color: color.withOpacity(0.3),
+              border: Border.all(color: color, width: 1.5),
+              borderRadius: BorderRadius.circular(3),
             ),
-            Container(
-              width: 28,
-              height: 12,
-              decoration: BoxDecoration(
-                color: color.withOpacity(0.3),
-                border: Border.all(color: color, width: 1.5),
-                borderRadius: BorderRadius.circular(3),
-              ),
-              child: Align(
-                alignment: Alignment.centerLeft,
-                child: Container(
-                  width: 14,
-                  height: double.infinity,
-                  decoration: BoxDecoration(
-                    color: color.withOpacity(0.6),
-                    borderRadius: BorderRadius.circular(2),
-                  ),
-                ),
-              ),
-            ),
-            Container(
-              width: 8,
-              height: 8,
-              decoration: BoxDecoration(
-                color: color,
-                borderRadius: BorderRadius.circular(2),
-              ),
-            ),
-          ],
-        ),
+            child: Align(alignment: Alignment.centerLeft,
+              child: Container(width: 14, height: double.infinity,
+                decoration: BoxDecoration(
+                  color: color.withOpacity(0.6),
+                  borderRadius: BorderRadius.circular(2),
+                )),
+            )),
+          Container(width: 8, height: 8,
+            decoration: BoxDecoration(
+              color: color,
+              borderRadius: BorderRadius.circular(2),
+            )),
+        ]),
       );
 }
 
-// ── Patch Shape ───────────────────────────────────────────
 class _PatchShape extends StatelessWidget {
-  final Color color;
   const _PatchShape({required this.color});
-
+  final Color color;
   @override
   Widget build(BuildContext context) => Container(
-        width: 38,
-        height: 38,
+        width: 38, height: 38,
         decoration: BoxDecoration(
           color: color.withOpacity(0.2),
           borderRadius: BorderRadius.circular(6),
           border: Border.all(color: color, width: 2),
         ),
-        child: Center(
-          child: Container(
-            width: 20,
-            height: 20,
-            decoration: BoxDecoration(
-              color: color.withOpacity(0.5),
-              borderRadius: BorderRadius.circular(4),
-            ),
+        child: Center(child: Container(
+          width: 20, height: 20,
+          decoration: BoxDecoration(
+            color: color.withOpacity(0.5),
+            borderRadius: BorderRadius.circular(4),
           ),
-        ),
+        )),
       );
 }
+

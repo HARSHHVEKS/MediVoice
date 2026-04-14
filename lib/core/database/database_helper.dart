@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
+import 'package:sqflite/sqflite.dart';
+
 import 'db_constants.dart';
 import 'db_tables.dart';
 

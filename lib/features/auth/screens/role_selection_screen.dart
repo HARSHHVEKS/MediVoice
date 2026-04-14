@@ -7,7 +7,7 @@ import '../../../core/database/database_helper.dart';
 import '../../../core/database/db_constants.dart';
 
 class RoleSelectionScreen extends StatefulWidget {
-  const RoleSelectionScreen({Key? key}) : super(key: key);
+  const RoleSelectionScreen({super.key});
 
   @override
   State<RoleSelectionScreen> createState() =>
@@ -34,7 +34,7 @@ class _RoleSelectionScreenState extends State<RoleSelectionScreen>
       vsync: this,
       duration: const Duration(milliseconds: 700),
     );
-    _fadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
+    _fadeAnimation = Tween<double>(begin: 0, end: 1).animate(
       CurvedAnimation(
         parent: _fadeController,
         curve: Curves.easeIn,
@@ -46,7 +46,7 @@ class _RoleSelectionScreenState extends State<RoleSelectionScreen>
       vsync: this,
       duration: const Duration(milliseconds: 1200),
     );
-    _pulseAnimation = Tween<double>(begin: 1.0, end: 1.04).animate(
+    _pulseAnimation = Tween<double>(begin: 1, end: 1.04).animate(
       CurvedAnimation(
         parent: _pulseController,
         curve: Curves.easeInOut,
@@ -243,8 +243,7 @@ class _RoleSelectionScreenState extends State<RoleSelectionScreen>
   }
 
   // ── Header ─────────────────────────────────────────────
-  Widget _buildHeader() {
-    return Column(
+  Widget _buildHeader() => Column(
       children: [
         Text(
           _greeting,
@@ -294,11 +293,9 @@ class _RoleSelectionScreenState extends State<RoleSelectionScreen>
         ),
       ],
     );
-  }
 
   // ── Patient Button ──────────────────────────────────────
-  Widget _buildPatientButton(Size size) {
-    return AnimatedBuilder(
+  Widget _buildPatientButton(Size size) => AnimatedBuilder(
       animation: _pulseController,
       builder: (context, child) => Transform.scale(
         scale: _pulseAnimation.value,
@@ -378,11 +375,9 @@ class _RoleSelectionScreenState extends State<RoleSelectionScreen>
         ),
       ),
     );
-  }
 
   // ── More Button ─────────────────────────────────────────
-  Widget _buildMoreButton() {
-    return GestureDetector(
+  Widget _buildMoreButton() => GestureDetector(
       onTap: _showMoreOptions,
       child: Container(
         padding: const EdgeInsets.symmetric(
@@ -420,11 +415,9 @@ class _RoleSelectionScreenState extends State<RoleSelectionScreen>
         ),
       ),
     );
-  }
 
   // ── Footer ──────────────────────────────────────────────
-  Widget _buildFooter() {
-    return Column(
+  Widget _buildFooter() => Column(
       children: [
         Container(
           height: 1,
@@ -442,24 +435,22 @@ class _RoleSelectionScreenState extends State<RoleSelectionScreen>
         ),
       ],
     );
-  }
 }
 
 // ══════════════════════════════════════════════════════════
 // More Options Sheet
 // ══════════════════════════════════════════════════════════
 class _MoreOptionsSheet extends StatelessWidget {
-  final VoidCallback onCaregiverTap;
-  final VoidCallback onAdminTap;
 
   const _MoreOptionsSheet({
     required this.onCaregiverTap,
     required this.onAdminTap,
   });
+  final VoidCallback onCaregiverTap;
+  final VoidCallback onAdminTap;
 
   @override
-  Widget build(BuildContext context) {
-    return Container(
+  Widget build(BuildContext context) => Container(
       decoration: const BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.only(
@@ -495,7 +486,7 @@ class _MoreOptionsSheet extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 4),
-          Text(
+          const Text(
             'For caregivers and hospital staff only',
             style: TextStyle(
               fontFamily: 'Poppins',
@@ -524,7 +515,7 @@ class _MoreOptionsSheet extends StatelessWidget {
           const SizedBox(height: AppDimensions.lg),
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: Text(
+            child: const Text(
               'Close',
               style: TextStyle(
                 fontFamily: 'Poppins',
@@ -536,17 +527,10 @@ class _MoreOptionsSheet extends StatelessWidget {
         ],
       ),
     );
-  }
 }
 
 // ── Sheet Option ────────────────────────────────────────
 class _SheetOption extends StatelessWidget {
-  final IconData icon;
-  final Color iconColor;
-  final Color iconBgColor;
-  final String label;
-  final String sublabel;
-  final VoidCallback onTap;
 
   const _SheetOption({
     required this.icon,
@@ -556,10 +540,15 @@ class _SheetOption extends StatelessWidget {
     required this.sublabel,
     required this.onTap,
   });
+  final IconData icon;
+  final Color iconColor;
+  final Color iconBgColor;
+  final String label;
+  final String sublabel;
+  final VoidCallback onTap;
 
   @override
-  Widget build(BuildContext context) {
-    return Material(
+  Widget build(BuildContext context) => Material(
       color: Colors.transparent,
       child: InkWell(
         onTap: onTap,
@@ -621,5 +610,4 @@ class _SheetOption extends StatelessWidget {
         ),
       ),
     );
-  }
 }

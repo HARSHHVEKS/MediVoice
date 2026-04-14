@@ -10,12 +10,12 @@ import '../../../core/database/database_helper.dart';
 import '../../../core/database/db_constants.dart';
 
 class AddPatientScreen extends StatefulWidget {
-  final Map<String, dynamic>? existingPatient;
 
   const AddPatientScreen({
-    Key? key,
+    super.key,
     this.existingPatient,
-  }) : super(key: key);
+  });
+  final Map<String, dynamic>? existingPatient;
 
   @override
   State<AddPatientScreen> createState() => _AddPatientScreenState();
@@ -195,7 +195,7 @@ class _AddPatientScreenState extends State<AddPatientScreen> {
             const SizedBox(height: AppDimensions.lg),
             TextButton(
               onPressed: () => Navigator.pop(context),
-              child: Text(
+              child: const Text(
                 'Cancel',
                 style: TextStyle(
                   fontFamily: 'Poppins',
@@ -217,8 +217,7 @@ class _AddPatientScreenState extends State<AddPatientScreen> {
     required String sublabel,
     required Color color,
     required VoidCallback onTap,
-  }) {
-    return Material(
+  }) => Material(
       color: Colors.transparent,
       child: InkWell(
         onTap: onTap,
@@ -258,7 +257,7 @@ class _AddPatientScreenState extends State<AddPatientScreen> {
                     ),
                     Text(
                       sublabel,
-                      style: TextStyle(
+                      style: const TextStyle(
                         fontFamily: 'Poppins',
                         fontSize: 12,
                         color: AppColors.textSecondary,
@@ -277,7 +276,6 @@ class _AddPatientScreenState extends State<AddPatientScreen> {
         ),
       ),
     );
-  }
 
   // ── Save Patient ─────────────────────────────────────────
   Future<void> _savePatient() async {
@@ -356,8 +354,7 @@ class _AddPatientScreenState extends State<AddPatientScreen> {
     }
   }
     @override
-  Widget build(BuildContext context) {
-    return Scaffold(
+  Widget build(BuildContext context) => Scaffold(
       appBar: AppBar(
         backgroundColor: AppColors.primaryBlue,
         elevation: 0,
@@ -698,7 +695,6 @@ class _AddPatientScreenState extends State<AddPatientScreen> {
         ),
       ),
     );
-  }
 
   // ── Photo Section ────────────────────────────────────────
   Widget _buildPhotoSection() {
@@ -777,7 +773,7 @@ class _AddPatientScreenState extends State<AddPatientScreen> {
             ),
           ),
           const SizedBox(height: AppDimensions.sm),
-          Text(
+          const Text(
             'Tap to add photo',
             style: TextStyle(
               fontFamily: 'Poppins',
@@ -795,8 +791,7 @@ class _AddPatientScreenState extends State<AddPatientScreen> {
     required String title,
     required IconData icon,
     required List<Widget> children,
-  }) {
-    return Container(
+  }) => Container(
       padding: const EdgeInsets.all(AppDimensions.lg),
       decoration: BoxDecoration(
         color: Colors.white,
@@ -834,11 +829,9 @@ class _AddPatientScreenState extends State<AddPatientScreen> {
         ],
       ),
     );
-  }
 
   // ── Label ────────────────────────────────────────────────
-  Widget _buildLabel(String text) {
-    return Text(
+  Widget _buildLabel(String text) => Text(
       text,
       style: const TextStyle(
         fontFamily: 'Poppins',
@@ -847,14 +840,12 @@ class _AddPatientScreenState extends State<AddPatientScreen> {
         color: AppColors.textPrimary,
       ),
     );
-  }
 
   // ── Input decoration ─────────────────────────────────────
   InputDecoration _inputDeco({
     required String hint,
     required IconData icon,
-  }) {
-    return InputDecoration(
+  }) => InputDecoration(
       hintText: hint,
       hintStyle: TextStyle(
         fontFamily: 'Poppins',
@@ -891,5 +882,4 @@ class _AddPatientScreenState extends State<AddPatientScreen> {
         ),
       ),
     );
-  }
 }

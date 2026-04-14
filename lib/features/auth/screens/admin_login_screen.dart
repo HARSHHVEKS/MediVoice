@@ -8,7 +8,7 @@ import '../../../core/constants/app_dimensions.dart';
 import '../../../core/database/database_helper.dart';
 
 class AdminLoginScreen extends StatefulWidget {
-  const AdminLoginScreen({Key? key}) : super(key: key);
+  const AdminLoginScreen({super.key});
 
   @override
   State<AdminLoginScreen> createState() => _AdminLoginScreenState();
@@ -141,8 +141,7 @@ class _AdminLoginScreenState extends State<AdminLoginScreen>
   }
 
   @override
-  Widget build(BuildContext context) {
-    return Scaffold(
+  Widget build(BuildContext context) => Scaffold(
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
@@ -193,11 +192,9 @@ class _AdminLoginScreenState extends State<AdminLoginScreen>
         ),
       ),
     );
-  }
 
   // ── Header ───────────────────────────────────────────────
-  Widget _buildHeader() {
-    return Column(
+  Widget _buildHeader() => Column(
       children: [
         Container(
           width: 90,
@@ -237,7 +234,6 @@ class _AdminLoginScreenState extends State<AdminLoginScreen>
         ),
       ],
     );
-  }
 
   // ── PIN Card ─────────────────────────────────────────────
   Widget _buildPinCard() {
@@ -280,8 +276,7 @@ class _AdminLoginScreenState extends State<AdminLoginScreen>
 
     return AnimatedBuilder(
       animation: _shakeAnimation,
-      builder: (context, child) {
-        return Transform.translate(
+      builder: (context, child) => Transform.translate(
           offset: Offset(
             _shakeController.isAnimating
                 ? (_shakeAnimation.value *
@@ -290,8 +285,7 @@ class _AdminLoginScreenState extends State<AdminLoginScreen>
             0,
           ),
           child: child,
-        );
-      },
+        ),
       child: Container(
         padding: const EdgeInsets.all(AppDimensions.xl),
         decoration: BoxDecoration(
@@ -358,7 +352,7 @@ class _AdminLoginScreenState extends State<AdminLoginScreen>
               defaultPinTheme: defaultPinTheme,
               focusedPinTheme: focusedPinTheme,
               errorPinTheme: errorPinTheme,
-              onCompleted: (pin) => _handleVerify(pin),
+              onCompleted: _handleVerify,
             ),
 
             const SizedBox(height: AppDimensions.xl),
@@ -407,8 +401,7 @@ class _AdminLoginScreenState extends State<AdminLoginScreen>
   }
 
   // ── Default PIN hint ─────────────────────────────────────
-  Widget _buildHint() {
-    return Container(
+  Widget _buildHint() => Container(
       padding: const EdgeInsets.symmetric(
         horizontal: AppDimensions.lg,
         vertical: AppDimensions.sm,
@@ -440,5 +433,4 @@ class _AdminLoginScreenState extends State<AdminLoginScreen>
         ],
       ),
     );
-  }
 }

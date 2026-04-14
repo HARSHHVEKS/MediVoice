@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import 'core/database/database_helper.dart';
+import 'core/services/notification_service.dart'; // ← NEW
 import 'core/theme/app_theme.dart';
 import 'features/auth/screens/admin_login_screen.dart';
 import 'features/auth/screens/role_selection_screen.dart';
@@ -27,6 +28,9 @@ void main() async {
       ? '✅ DATABASE: Ready!'
       : '❌ DATABASE: Something went wrong!');
 
+  // Initialize notifications ← NEW
+  await NotificationService.instance.initialize();
+
   runApp(const MediVoiceApp());
 }
 
@@ -40,31 +44,20 @@ class MediVoiceApp extends StatelessWidget {
         debugShowCheckedModeBanner: false,
         initialRoute: '/',
         routes: {
-          // ── Core ──────────────────────────────────
           '/': (context) => const SplashScreen(),
           '/role-selection': (context) =>
               const RoleSelectionScreen(),
-
-          // ── Patient ───────────────────────────────
           '/patient-register': (context) =>
               const PatientRegisterScreen(),
           '/patient-home': (context) =>
               const PatientHomeScreen(),
-
-          // ── Caregiver ─────────────────────────────
           '/caregiver-profiles': (context) =>
               const CaregiverProfilesScreen(),
           '/add-patient': (context) =>
               const AddPatientScreen(),
-
-          // ── Admin ─────────────────────────────────
           '/admin-login': (context) =>
               const AdminLoginScreen(),
         },
-        // ── Routes that need arguments ───────────────
-        // medication_list and add_medication use
-        // Navigator.push with MaterialPageRoute
-        // so they don't need named routes here
         onUnknownRoute: (settings) => MaterialPageRoute(
           builder: (_) => const RoleSelectionScreen(),
         ),

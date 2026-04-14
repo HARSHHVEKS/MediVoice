@@ -8,16 +8,17 @@ import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_dimensions.dart';
 import '../../../core/database/database_helper.dart';
 import '../../../core/database/db_constants.dart';
+import '../../../core/services/notification_service.dart'; // ← NEW
+
 
 class PatientAddMedicationScreen extends StatefulWidget {
-  final int patientId;
-  final Map<String, dynamic>? existingMedication;
 
   const PatientAddMedicationScreen({
-    Key? key,
-    required this.patientId,
+    required this.patientId, super.key,
     this.existingMedication,
-  }) : super(key: key);
+  });
+  final int patientId;
+  final Map<String, dynamic>? existingMedication;
 
   @override
   State<PatientAddMedicationScreen> createState() =>
@@ -44,7 +45,7 @@ class _PatientAddMedicationScreenState
   String? _existingPhotoPath;
 
   // ── Time slots ────────────────────────────────────────
-  List<TimeOfDay> _timeslots = [
+  final List<TimeOfDay> _timeslots = [
     const TimeOfDay(hour: 8, minute: 0),
   ];
 
@@ -349,6 +350,7 @@ class _PatientAddMedicationScreenState
       }
 
       // Save time slots
+            // Save time slots
       await _db.deleteSchedulesByMedication(medId);
       for (final time in _timeslots) {
         final timeStr =
@@ -363,6 +365,15 @@ class _PatientAddMedicationScreenState
           DBConstants.schedCreatedAt: now,
         });
       }
+
+      // ── Schedule alarms ← NEW ──────────────────────
+      await NotificationService.instance.scheduleAllReminders(
+        medicationId: medId,
+        medicineName: _nameController.text.trim(),
+        dosage:       _dosageController.text.trim(),
+        unit:         _selectedUnit,
+        timeSlots:    _timeslots,
+      );
 
       debugPrint(
         '✅ PATIENT MED SAVED: '
@@ -411,8 +422,7 @@ class _PatientAddMedicationScreenState
   }
 
   @override
-  Widget build(BuildContext context) {
-    return Scaffold(
+  Widget build(BuildContext context) => Scaffold(
       backgroundColor: AppColors.backgroundLight,
       body: Container(
         decoration: const BoxDecoration(
@@ -505,7 +515,7 @@ class _PatientAddMedicationScreenState
                                   inputFormatters: [
                                     FilteringTextInputFormatter
                                         .allow(
-                                      RegExp(r'[0-9.]'),
+                                      RegExp('[0-9.]'),
                                     ),
                                   ],
                                   style: const TextStyle(
@@ -1094,7 +1104,6 @@ class _PatientAddMedicationScreenState
         ),
       ),
     );
-  }
 
   // ── Top Bar ───────────────────────────────────────────
   Widget _buildTopBar() => Padding(

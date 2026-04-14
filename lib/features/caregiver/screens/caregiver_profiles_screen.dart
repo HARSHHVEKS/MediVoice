@@ -8,7 +8,7 @@ import '../../../core/database/db_constants.dart';
 import 'medication_list_screen.dart';
 
 class CaregiverProfilesScreen extends StatefulWidget {
-  const CaregiverProfilesScreen({Key? key}) : super(key: key);
+  const CaregiverProfilesScreen({super.key});
 
   @override
   State<CaregiverProfilesScreen> createState() =>
@@ -40,7 +40,7 @@ class _CaregiverProfilesScreenState
       final patients = await _db.getCaregiverPatients();
 
       // Get medicine count for each patient
-      final Map<int, int> counts = {};
+      final counts = <int, int>{};
       for (final patient in patients) {
         final id = patient[DBConstants.patientId] as int;
         final meds = await _db.getMedicationsByPatient(id);
@@ -248,9 +248,7 @@ Widget _buildEmptyState() => Center(
         100, // space for FAB
       ),
       itemCount: _patients.length,
-      itemBuilder: (context, index) {
-        return _buildPatientCard(_patients[index]);
-      },
+      itemBuilder: (context, index) => _buildPatientCard(_patients[index]),
     );
 
   // ── Patient Card ─────────────────────────────────────────
@@ -405,8 +403,7 @@ Widget _buildEmptyState() => Center(
   }
 
   // ── Small tag widget ─────────────────────────────────────
-  Widget _buildTag(String text, IconData icon) {
-    return Row(
+  Widget _buildTag(String text, IconData icon) => Row(
       mainAxisSize: MainAxisSize.min,
       children: [
         Icon(
@@ -425,5 +422,4 @@ Widget _buildEmptyState() => Center(
         ),
       ],
     );
-  }
 }
