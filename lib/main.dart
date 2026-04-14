@@ -7,7 +7,10 @@ import 'features/auth/screens/admin_login_screen.dart';
 import 'features/auth/screens/role_selection_screen.dart';
 import 'features/caregiver/screens/add_patient_screen.dart';
 import 'features/caregiver/screens/caregiver_profiles_screen.dart';
+import 'features/caregiver/screens/medication_list_screen.dart';
+import 'features/caregiver/screens/add_medication_screen.dart';
 import 'features/patient/screens/patient_home_screen.dart';
+import 'features/patient/screens/patient_register_screen.dart';
 import 'features/splash/splash_screen.dart';
 
 void main() async {
@@ -20,7 +23,8 @@ void main() async {
   ]);
 
   // Initialize database on startup
-  final dbWorking = await DatabaseHelper.instance.isDatabaseWorking();
+  final dbWorking =
+      await DatabaseHelper.instance.isDatabaseWorking();
   debugPrint(dbWorking
       ? '✅ DATABASE: Ready!'
       : '❌ DATABASE: Something went wrong!');
@@ -33,36 +37,38 @@ class MediVoiceApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => MaterialApp(
-      title: 'MediVoice',
-      theme: AppTheme.lightTheme,
-      debugShowCheckedModeBanner: false,
-      initialRoute: '/',
-      routes: {
-        // ── Core ──────────────────────────────────────
-        '/': (context) => const SplashScreen(),
-        '/role-selection': (context) => const RoleSelectionScreen(),
+        title: 'MediVoice',
+        theme: AppTheme.lightTheme,
+        debugShowCheckedModeBanner: false,
+        initialRoute: '/',
+        routes: {
+          // ── Core ──────────────────────────────────
+          '/': (context) => const SplashScreen(),
+          '/role-selection': (context) =>
+              const RoleSelectionScreen(),
 
-        // ── Admin ──────────────────────────────────────
-        '/admin-login': (context) => const AdminLoginScreen(),
+          // ── Patient ───────────────────────────────
+          '/patient-register': (context) =>
+              const PatientRegisterScreen(),
+          '/patient-home': (context) =>
+              const PatientHomeScreen(),
 
-        '/caregiver-profiles': (context) => const CaregiverProfilesScreen(),
+          // ── Caregiver ─────────────────────────────
+          '/caregiver-profiles': (context) =>
+              const CaregiverProfilesScreen(),
+          '/add-patient': (context) =>
+              const AddPatientScreen(),
 
-        '/add-patient': (context) => const AddPatientScreen(),
-
-
-
-        '/patient-home': (context) => const PatientHomeScreen(),
-
-
-
-
-        // ── Coming Soon ────────────────────────────────
-        // '/patient-home':        Step 8
-        // '/caregiver-profiles':  Step 8
-        // '/add-patient':         Step 9
-        // '/add-medication':      Step 10
-        // '/record-audio':        Step 11
-        // '/dose-confirmation':   Step 12
-      },
-    );
+          // ── Admin ─────────────────────────────────
+          '/admin-login': (context) =>
+              const AdminLoginScreen(),
+        },
+        // ── Routes that need arguments ───────────────
+        // medication_list and add_medication use
+        // Navigator.push with MaterialPageRoute
+        // so they don't need named routes here
+        onUnknownRoute: (settings) => MaterialPageRoute(
+          builder: (_) => const RoleSelectionScreen(),
+        ),
+      );
 }

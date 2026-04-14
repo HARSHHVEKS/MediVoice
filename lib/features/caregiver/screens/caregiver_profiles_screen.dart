@@ -5,6 +5,7 @@ import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_dimensions.dart';
 import '../../../core/database/database_helper.dart';
 import '../../../core/database/db_constants.dart';
+import 'medication_list_screen.dart';
 
 class CaregiverProfilesScreen extends StatefulWidget {
   const CaregiverProfilesScreen({Key? key}) : super(key: key);
@@ -36,7 +37,7 @@ class _CaregiverProfilesScreenState
     try {
       setState(() => _isLoading = true);
 
-      final patients = await _db.getAllPatients();
+      final patients = await _db.getCaregiverPatients();
 
       // Get medicine count for each patient
       final Map<int, int> counts = {};
@@ -61,24 +62,26 @@ class _CaregiverProfilesScreenState
   }
 
   // ── Select patient to manage ─────────────────────────────
-  Future<void> _selectPatient(Map<String, dynamic> patient) async {
+  Future<void> _selectPatient(
+    Map<String, dynamic> patient,
+  ) async {
     final patientId = patient[DBConstants.patientId] as int;
     await _db.setCurrentPatient(patientId);
 
     if (!mounted) return;
 
-    // Go to patient management screen
-    // Step 10: will navigate to medication list
-    Navigator.pushNamed(
+    Navigator.push(
       context,
-      '/patient-medications',
-      arguments: patient,
-    ).then((_) => _loadPatients()); // refresh on return
+      MaterialPageRoute(
+        builder: (_) => MedicationListScreen(
+          patient: patient,
+        ),
+      ),
+    ).then((_) => _loadPatients());
   }
 
   @override
-  Widget build(BuildContext context) {
-    return Scaffold(
+  Widget build(BuildContext context) => Scaffold(
       body: Container(
         width: double.infinity,
         height: double.infinity,
@@ -132,11 +135,9 @@ class _CaregiverProfilesScreenState
         ),
       ),
     );
-  }
 
   // ── Top Bar ──────────────────────────────────────────────
-  Widget _buildTopBar() {
-    return Padding(
+  Widget _buildTopBar() => Padding(
       padding: const EdgeInsets.all(AppDimensions.md),
       child: Row(
         children: [
@@ -183,7 +184,6 @@ class _CaregiverProfilesScreenState
         ],
       ),
     );
-  }
 
   // ── Main Content ─────────────────────────────────────────
   Widget _buildContent() {
@@ -194,8 +194,7 @@ class _CaregiverProfilesScreenState
   }
 
   // ── Empty State ──────────────────────────────────────────
-Widget _buildEmptyState() {
-    return Center(
+Widget _buildEmptyState() => Center(
       child: Padding(
         padding: const EdgeInsets.all(AppDimensions.xl),
         child: Column(
@@ -239,11 +238,9 @@ Widget _buildEmptyState() {
         ),
       ),
     );
-  }
 
   // ── Patient List ─────────────────────────────────────────
-  Widget _buildPatientList() {
-    return ListView.builder(
+  Widget _buildPatientList() => ListView.builder(
       padding: const EdgeInsets.fromLTRB(
         AppDimensions.md,
         AppDimensions.sm,
@@ -255,7 +252,6 @@ Widget _buildEmptyState() {
         return _buildPatientCard(_patients[index]);
       },
     );
-  }
 
   // ── Patient Card ─────────────────────────────────────────
   Widget _buildPatientCard(Map<String, dynamic> patient) {
@@ -264,7 +260,8 @@ Widget _buildEmptyState() {
     final age = patient[DBConstants.patientAge];
     final patientId = patient[DBConstants.patientId] as int;
     final medCount = _medicationCounts[patientId] ?? 0;
-    final initial = name.substring(0, 1).toUpperCase();
+    final initial = name.isNotEmpty
+      ? name.substring(0, 1).toUpperCase() : '?';
 
     // Pick avatar color based on name
     final colors = [

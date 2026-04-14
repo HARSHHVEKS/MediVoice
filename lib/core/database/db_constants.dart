@@ -1,15 +1,9 @@
-// ══════════════════════════════════════════════════════════
-// DB Constants — All table and column names
-// ══════════════════════════════════════════════════════════
-
 class DBConstants {
-  // ── Database info ───────────────────────────────────────
+  // ── Database info ─────────────────────────────────────
   static const String dbName = 'medivoice.db';
   static const int dbVersion = 1;
 
-  // ══════════════════════════════════════════════════════
-  // TABLE NAMES
-  // ══════════════════════════════════════════════════════
+  // ── Table Names ───────────────────────────────────────
   static const String tablePatients = 'patients';
   static const String tableMedications = 'medications';
   static const String tableReminderSchedules = 'reminder_schedules';
@@ -17,11 +11,12 @@ class DBConstants {
   static const String tableAlertContacts = 'alert_contacts';
   static const String tableAppSettings = 'app_settings';
 
-  // ══════════════════════════════════════════════════════
-  // PATIENTS TABLE
-  // Created by caregiver/nurse during consultation
-  // No passwords, no PINs — just profile info
-  // ══════════════════════════════════════════════════════
+  // ── Roles ─────────────────────────────────────────────
+  static const String rolePatient = 'patient';
+  static const String roleCaregiver = 'caregiver';
+  static const String roleAdmin = 'admin';
+
+  // ── PATIENTS TABLE ────────────────────────────────────
   static const String patientId = 'id';
   static const String patientFullName = 'full_name';
   static const String patientAge = 'age';
@@ -31,13 +26,12 @@ class DBConstants {
   static const String patientNotes = 'medical_notes';
   static const String patientWard = 'ward';
   static const String patientAlertPhone = 'alert_phone_number';
+  static const String patientIsDevicePatient = 'is_device_patient';
   static const String patientIsActive = 'is_active';
   static const String patientCreatedAt = 'created_at';
   static const String patientUpdatedAt = 'updated_at';
 
-  // ══════════════════════════════════════════════════════
-  // MEDICATIONS TABLE
-  // ══════════════════════════════════════════════════════
+  // ── MEDICATIONS TABLE ─────────────────────────────────
   static const String medId = 'id';
   static const String medPatientId = 'patient_id';
   static const String medName = 'medication_name';
@@ -55,9 +49,7 @@ class DBConstants {
   static const String medCreatedAt = 'created_at';
   static const String medUpdatedAt = 'updated_at';
 
-  // ══════════════════════════════════════════════════════
-  // REMINDER SCHEDULES TABLE
-  // ══════════════════════════════════════════════════════
+  // ── REMINDER SCHEDULES TABLE ──────────────────────────
   static const String schedId = 'id';
   static const String schedMedId = 'medication_id';
   static const String schedPatientId = 'patient_id';
@@ -67,9 +59,7 @@ class DBConstants {
   static const String schedAlarmId = 'alarm_id';
   static const String schedCreatedAt = 'created_at';
 
-  // ══════════════════════════════════════════════════════
-  // DOSE LOGS TABLE
-  // ══════════════════════════════════════════════════════
+  // ── DOSE LOGS TABLE ───────────────────────────────────
   static const String logId = 'id';
   static const String logMedId = 'medication_id';
   static const String logPatientId = 'patient_id';
@@ -89,9 +79,7 @@ class DBConstants {
   static const String statusMissed = 'missed';
   static const String statusSkipped = 'skipped';
 
-  // ══════════════════════════════════════════════════════
-  // ALERT CONTACTS TABLE
-  // ══════════════════════════════════════════════════════
+  // ── ALERT CONTACTS TABLE ──────────────────────────────
   static const String contactId = 'id';
   static const String contactPatientId = 'patient_id';
   static const String contactName = 'contact_name';
@@ -102,9 +90,7 @@ class DBConstants {
   static const String contactIsEmergency = 'is_emergency_contact';
   static const String contactCreatedAt = 'created_at';
 
-  // ══════════════════════════════════════════════════════
-  // APP SETTINGS TABLE
-  // ══════════════════════════════════════════════════════
+  // ── APP SETTINGS TABLE ────────────────────────────────
   static const String settingKey = 'setting_key';
   static const String settingValue = 'setting_value';
   static const String settingUpdatedAt = 'updated_at';
@@ -114,5 +100,4 @@ class DBConstants {
   static const String keyAdminPin = 'admin_pin';
   static const String keyDefaultLanguage = 'default_language';
   static const String keyMissedDoseDelay = 'missed_dose_delay_minutes';
-
 }

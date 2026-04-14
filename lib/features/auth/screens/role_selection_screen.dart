@@ -7,16 +7,17 @@ import '../../../core/database/database_helper.dart';
 import '../../../core/database/db_constants.dart';
 
 class RoleSelectionScreen extends StatefulWidget {
-  const RoleSelectionScreen({super.key});
+  const RoleSelectionScreen({Key? key}) : super(key: key);
 
   @override
-  State<RoleSelectionScreen> createState() => _RoleSelectionScreenState();
+  State<RoleSelectionScreen> createState() =>
+      _RoleSelectionScreenState();
 }
 
 class _RoleSelectionScreenState extends State<RoleSelectionScreen>
     with TickerProviderStateMixin {
 
-  // ── Animations ───────────────────────────────────────────
+  // ── Animations ─────────────────────────────────────────
   late AnimationController _fadeController;
   late Animation<double> _fadeAnimation;
   late AnimationController _pulseController;
@@ -33,8 +34,11 @@ class _RoleSelectionScreenState extends State<RoleSelectionScreen>
       vsync: this,
       duration: const Duration(milliseconds: 700),
     );
-    _fadeAnimation = Tween<double>(begin: 0, end: 1).animate(
-      CurvedAnimation(parent: _fadeController, curve: Curves.easeIn),
+    _fadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(
+        parent: _fadeController,
+        curve: Curves.easeIn,
+      ),
     );
     _fadeController.forward();
 
@@ -42,8 +46,11 @@ class _RoleSelectionScreenState extends State<RoleSelectionScreen>
       vsync: this,
       duration: const Duration(milliseconds: 1200),
     );
-    _pulseAnimation = Tween<double>(begin: 1, end: 1.04).animate(
-      CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut),
+    _pulseAnimation = Tween<double>(begin: 1.0, end: 1.04).animate(
+      CurvedAnimation(
+        parent: _pulseController,
+        curve: Curves.easeInOut,
+      ),
     );
     _pulseController.repeat(reverse: true);
   }
@@ -55,7 +62,7 @@ class _RoleSelectionScreenState extends State<RoleSelectionScreen>
     super.dispose();
   }
 
-  // ── Time greeting ────────────────────────────────────────
+  // ── Time greeting ───────────────────────────────────────
   String get _greeting {
     final hour = DateTime.now().hour;
     if (hour < 12) return 'Good Morning 🌤️';
@@ -63,74 +70,32 @@ class _RoleSelectionScreenState extends State<RoleSelectionScreen>
     return 'Good Evening 🌙';
   }
 
-  // ── Patient tap — check profiles ─────────────────────────
+  // ── Patient tapped ──────────────────────────────────────
   Future<void> _onPatientTapped() async {
     final db = DatabaseHelper.instance;
-    final patients = await db.getAllPatients();
+
+    // Check if device patient already exists
+    final patients = await db.getDevicePatients();
 
     if (!mounted) return;
 
     if (patients.isEmpty) {
-      // No profiles yet — show message
-      _showNoProfileDialog();
+      // No profile yet — go create one (one time only)
+      Navigator.pushNamed(context, '/patient-register');
     } else if (patients.length == 1) {
-      // Only one patient — go straight to home
+      // Profile exists — go straight in, no login
       await db.setCurrentPatient(
         patients.first[DBConstants.patientId] as int,
       );
       if (!mounted) return;
       Navigator.pushNamed(context, '/patient-home');
     } else {
-      // Multiple patients — show picker
+      // Multiple device patients — show picker
       _showPatientPicker(patients);
     }
   }
 
-  // ── No profile dialog ────────────────────────────────────
-  void _showNoProfileDialog() {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(AppDimensions.radiusXl),
-        ),
-        title: const Text(
-          'No Profile Found',
-          style: TextStyle(
-            fontFamily: 'Poppins',
-            fontWeight: FontWeight.w700,
-            fontSize: 18,
-          ),
-        ),
-        content: const Text(
-          'No patient profile has been set up yet.\n\n'
-          'Please ask your nurse or doctor to set up '
-          'your medicines during your next consultation.',
-          style: TextStyle(
-            fontFamily: 'Poppins',
-            fontSize: 14,
-            height: 1.6,
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text(
-              'OK',
-              style: TextStyle(
-                fontFamily: 'Poppins',
-                fontWeight: FontWeight.w600,
-                color: AppColors.successGreen,
-                fontSize: 16,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // ── Patient picker — if multiple profiles ────────────────
+  // ── Patient picker (multiple profiles) ─────────────────
   void _showPatientPicker(List<Map<String, dynamic>> patients) {
     showModalBottomSheet(
       context: context,
@@ -147,7 +112,6 @@ class _RoleSelectionScreenState extends State<RoleSelectionScreen>
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            // Handle
             Container(
               width: 40,
               height: 4,
@@ -158,7 +122,7 @@ class _RoleSelectionScreenState extends State<RoleSelectionScreen>
             ),
             const SizedBox(height: AppDimensions.lg),
             const Text(
-              'Select Patient',
+              'Who are you?',
               style: TextStyle(
                 fontFamily: 'Poppins',
                 fontSize: 20,
@@ -167,44 +131,41 @@ class _RoleSelectionScreenState extends State<RoleSelectionScreen>
               ),
             ),
             const SizedBox(height: AppDimensions.lg),
-            ...patients.map((patient) => ListTile(
-                  leading: CircleAvatar(
-                    backgroundColor: AppColors.successGreen,
-                    child: Text(
-                      (patient[DBConstants.patientFullName] as String)
-                          .substring(0, 1)
-                          .toUpperCase(),
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontFamily: 'Poppins',
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                  ),
-                  title: Text(
-                    patient[DBConstants.patientFullName] as String,
+            ...patients.map(
+              (patient) => ListTile(
+                leading: CircleAvatar(
+                  backgroundColor: AppColors.successGreen,
+                  child: Text(
+                    (patient[DBConstants.patientFullName] as String).isNotEmpty
+                    ? (patient[DBConstants.patientFullName] as String)
+                        .substring(0, 1)
+                        .toUpperCase()
+                    : '?',
                     style: const TextStyle(
+                      color: Colors.white,
                       fontFamily: 'Poppins',
-                      fontWeight: FontWeight.w600,
-                      fontSize: 16,
+                      fontWeight: FontWeight.w700,
                     ),
                   ),
-                  subtitle: Text(
-                    patient[DBConstants.patientWard] ?? 'No ward',
-                    style: const TextStyle(
-                      fontFamily: 'Poppins',
-                      fontSize: 13,
-                    ),
+                ),
+                title: Text(
+                  patient[DBConstants.patientFullName] as String,
+                  style: const TextStyle(
+                    fontFamily: 'Poppins',
+                    fontWeight: FontWeight.w600,
+                    fontSize: 16,
                   ),
-                  onTap: () async {
-                    await DatabaseHelper.instance.setCurrentPatient(
-                      patient[DBConstants.patientId] as int,
-                    );
-                    if (!mounted) return;
-                    Navigator.pop(context);
-                    Navigator.pushNamed(context, '/patient-home');
-                  },
-                )),
+                ),
+                onTap: () async {
+                  await DatabaseHelper.instance.setCurrentPatient(
+                    patient[DBConstants.patientId] as int,
+                  );
+                  if (!mounted) return;
+                  Navigator.pop(context);
+                  Navigator.pushNamed(context, '/patient-home');
+                },
+              ),
+            ),
             const SizedBox(height: AppDimensions.lg),
           ],
         ),
@@ -212,7 +173,7 @@ class _RoleSelectionScreenState extends State<RoleSelectionScreen>
     );
   }
 
-  // ── Show more options bottom sheet ───────────────────────
+  // ── More options (Caregiver / Admin) ────────────────────
   void _showMoreOptions() {
     showModalBottomSheet(
       context: context,
@@ -227,23 +188,6 @@ class _RoleSelectionScreenState extends State<RoleSelectionScreen>
           Navigator.pop(context);
           Navigator.pushNamed(context, '/admin-login');
         },
-      ),
-    );
-  }
-
-  void _showComingSoon(String screen) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          '🔜 Coming soon: $screen',
-          style: const TextStyle(fontFamily: 'Poppins', fontSize: 14),
-        ),
-        backgroundColor: AppColors.primaryDark,
-        duration: const Duration(seconds: 2),
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(AppDimensions.radiusMd),
-        ),
       ),
     );
   }
@@ -270,22 +214,22 @@ class _RoleSelectionScreenState extends State<RoleSelectionScreen>
                 children: [
                   SizedBox(height: size.height * 0.05),
 
-                  // ── Header ────────────────────────────
+                  // ── Header ───────────────────────────
                   _buildHeader(),
 
-                  // ── Patient Button ────────────────────
+                  // ── Patient Button ───────────────────
                   Expanded(
                     child: Center(
                       child: _buildPatientButton(size),
                     ),
                   ),
 
-                  // ── More Button ───────────────────────
+                  // ── Caregiver/Staff Button ───────────
                   _buildMoreButton(),
 
                   SizedBox(height: size.height * 0.02),
 
-                  // ── Footer ────────────────────────────
+                  // ── Footer ───────────────────────────
                   _buildFooter(),
 
                   const SizedBox(height: AppDimensions.lg),
@@ -298,8 +242,9 @@ class _RoleSelectionScreenState extends State<RoleSelectionScreen>
     );
   }
 
-  // ── Header ───────────────────────────────────────────────
-  Widget _buildHeader() => Column(
+  // ── Header ─────────────────────────────────────────────
+  Widget _buildHeader() {
+    return Column(
       children: [
         Text(
           _greeting,
@@ -349,16 +294,16 @@ class _RoleSelectionScreenState extends State<RoleSelectionScreen>
         ),
       ],
     );
+  }
 
-  // ── Big Patient Button ───────────────────────────────────
-  Widget _buildPatientButton(Size size) => AnimatedBuilder(
+  // ── Patient Button ──────────────────────────────────────
+  Widget _buildPatientButton(Size size) {
+    return AnimatedBuilder(
       animation: _pulseController,
-      builder: (context, child) {
-        return Transform.scale(
-          scale: _pulseAnimation.value,
-          child: child,
-        );
-      },
+      builder: (context, child) => Transform.scale(
+        scale: _pulseAnimation.value,
+        child: child,
+      ),
       child: GestureDetector(
         onTap: _onPatientTapped,
         child: Container(
@@ -433,9 +378,11 @@ class _RoleSelectionScreenState extends State<RoleSelectionScreen>
         ),
       ),
     );
+  }
 
-  // ── More Button ──────────────────────────────────────────
-  Widget _buildMoreButton() => GestureDetector(
+  // ── More Button ─────────────────────────────────────────
+  Widget _buildMoreButton() {
+    return GestureDetector(
       onTap: _showMoreOptions,
       child: Container(
         padding: const EdgeInsets.symmetric(
@@ -444,7 +391,8 @@ class _RoleSelectionScreenState extends State<RoleSelectionScreen>
         ),
         decoration: BoxDecoration(
           color: Colors.white.withOpacity(0.1),
-          borderRadius: BorderRadius.circular(AppDimensions.radiusXxl),
+          borderRadius:
+              BorderRadius.circular(AppDimensions.radiusXxl),
           border: Border.all(
             color: Colors.white.withOpacity(0.2),
             width: 1,
@@ -472,9 +420,11 @@ class _RoleSelectionScreenState extends State<RoleSelectionScreen>
         ),
       ),
     );
+  }
 
-  // ── Footer ───────────────────────────────────────────────
-  Widget _buildFooter() => Column(
+  // ── Footer ──────────────────────────────────────────────
+  Widget _buildFooter() {
+    return Column(
       children: [
         Container(
           height: 1,
@@ -492,22 +442,24 @@ class _RoleSelectionScreenState extends State<RoleSelectionScreen>
         ),
       ],
     );
+  }
 }
 
 // ══════════════════════════════════════════════════════════
-// More Options Bottom Sheet
+// More Options Sheet
 // ══════════════════════════════════════════════════════════
 class _MoreOptionsSheet extends StatelessWidget {
+  final VoidCallback onCaregiverTap;
+  final VoidCallback onAdminTap;
 
   const _MoreOptionsSheet({
     required this.onCaregiverTap,
     required this.onAdminTap,
   });
-  final VoidCallback onCaregiverTap;
-  final VoidCallback onAdminTap;
 
   @override
-  Widget build(BuildContext context) => Container(
+  Widget build(BuildContext context) {
+    return Container(
       decoration: const BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.only(
@@ -524,7 +476,6 @@ class _MoreOptionsSheet extends StatelessWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          // Handle
           Container(
             width: 40,
             height: 4,
@@ -533,9 +484,7 @@ class _MoreOptionsSheet extends StatelessWidget {
               borderRadius: BorderRadius.circular(2),
             ),
           ),
-
           const SizedBox(height: AppDimensions.lg),
-
           const Text(
             'Staff Access',
             style: TextStyle(
@@ -545,9 +494,7 @@ class _MoreOptionsSheet extends StatelessWidget {
               color: AppColors.textPrimary,
             ),
           ),
-
           const SizedBox(height: 4),
-
           Text(
             'For caregivers and hospital staff only',
             style: TextStyle(
@@ -556,10 +503,7 @@ class _MoreOptionsSheet extends StatelessWidget {
               color: AppColors.textSecondary,
             ),
           ),
-
           const SizedBox(height: AppDimensions.lg),
-
-          // Caregiver
           _SheetOption(
             icon: Icons.medical_services,
             iconColor: AppColors.primaryBlue,
@@ -568,10 +512,7 @@ class _MoreOptionsSheet extends StatelessWidget {
             sublabel: 'Manage patient profiles & medicines',
             onTap: onCaregiverTap,
           ),
-
           const SizedBox(height: AppDimensions.md),
-
-          // Admin
           _SheetOption(
             icon: Icons.admin_panel_settings,
             iconColor: AppColors.adminNavy,
@@ -580,9 +521,7 @@ class _MoreOptionsSheet extends StatelessWidget {
             sublabel: 'Staff and hospital management',
             onTap: onAdminTap,
           ),
-
           const SizedBox(height: AppDimensions.lg),
-
           TextButton(
             onPressed: () => Navigator.pop(context),
             child: Text(
@@ -597,10 +536,17 @@ class _MoreOptionsSheet extends StatelessWidget {
         ],
       ),
     );
+  }
 }
 
-// ── Sheet Option ─────────────────────────────────────────
+// ── Sheet Option ────────────────────────────────────────
 class _SheetOption extends StatelessWidget {
+  final IconData icon;
+  final Color iconColor;
+  final Color iconBgColor;
+  final String label;
+  final String sublabel;
+  final VoidCallback onTap;
 
   const _SheetOption({
     required this.icon,
@@ -610,19 +556,15 @@ class _SheetOption extends StatelessWidget {
     required this.sublabel,
     required this.onTap,
   });
-  final IconData icon;
-  final Color iconColor;
-  final Color iconBgColor;
-  final String label;
-  final String sublabel;
-  final VoidCallback onTap;
 
   @override
-  Widget build(BuildContext context) => Material(
+  Widget build(BuildContext context) {
+    return Material(
       color: Colors.transparent,
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(AppDimensions.radiusLg),
+        borderRadius:
+            BorderRadius.circular(AppDimensions.radiusLg),
         child: Container(
           padding: const EdgeInsets.all(AppDimensions.md),
           decoration: BoxDecoration(
@@ -640,7 +582,8 @@ class _SheetOption extends StatelessWidget {
                   color: iconBgColor,
                   borderRadius: BorderRadius.circular(14),
                 ),
-                child: Icon(icon, color: iconColor, size: 26),
+                child:
+                    Icon(icon, color: iconColor, size: 26),
               ),
               const SizedBox(width: AppDimensions.md),
               Expanded(
@@ -678,4 +621,5 @@ class _SheetOption extends StatelessWidget {
         ),
       ),
     );
+  }
 }

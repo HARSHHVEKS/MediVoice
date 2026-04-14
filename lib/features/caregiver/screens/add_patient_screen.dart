@@ -38,6 +38,7 @@ class _AddPatientScreenState extends State<AddPatientScreen> {
   bool _isLoading = false;
   File? _selectedPhoto;
   String? _existingPhotoPath;
+  bool _isDevicePatient = false;
   bool get _isEditing => widget.existingPatient != null;
 
   // ── Image Picker ─────────────────────────────────────────
@@ -62,16 +63,20 @@ class _AddPatientScreenState extends State<AddPatientScreen> {
     if (_isEditing) _prefillFields();
   }
 
+  // ── Prefill when editing ─────────────────────────────────
   void _prefillFields() {
     final p = widget.existingPatient!;
     _nameController.text = p[DBConstants.patientFullName] ?? '';
-    _ageController.text = p[DBConstants.patientAge]?.toString() ?? '';
+    _ageController.text =
+        p[DBConstants.patientAge]?.toString() ?? '';
     _wardController.text = p[DBConstants.patientWard] ?? '';
     _phoneController.text = p[DBConstants.patientAlertPhone] ?? '';
     _notesController.text = p[DBConstants.patientNotes] ?? '';
     _selectedGender = p[DBConstants.patientGender];
     _selectedLanguage = p[DBConstants.patientLanguage] ?? 'lg';
     _existingPhotoPath = p[DBConstants.patientPhoto];
+    _isDevicePatient =
+        (p[DBConstants.patientIsDevicePatient] ?? 0) == 1;
   }
 
   @override
@@ -84,7 +89,7 @@ class _AddPatientScreenState extends State<AddPatientScreen> {
     super.dispose();
   }
 
-  // ── Pick Photo ───────────────────────────────────────────
+  // ── Pick photo ───────────────────────────────────────────
   Future<void> _pickPhoto(ImageSource source) async {
     try {
       final picked = await _imagePicker.pickImage(
@@ -93,11 +98,8 @@ class _AddPatientScreenState extends State<AddPatientScreen> {
         maxHeight: 800,
         imageQuality: 85,
       );
-
       if (picked != null) {
-        setState(() {
-          _selectedPhoto = File(picked.path);
-        });
+        setState(() => _selectedPhoto = File(picked.path));
         debugPrint('✅ PHOTO: Selected ${picked.path}');
       }
     } catch (e) {
@@ -133,7 +135,6 @@ class _AddPatientScreenState extends State<AddPatientScreen> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            // Handle
             Container(
               width: 40,
               height: 4,
@@ -142,9 +143,7 @@ class _AddPatientScreenState extends State<AddPatientScreen> {
                 borderRadius: BorderRadius.circular(2),
               ),
             ),
-
             const SizedBox(height: AppDimensions.lg),
-
             const Text(
               'Add Patient Photo',
               style: TextStyle(
@@ -154,10 +153,7 @@ class _AddPatientScreenState extends State<AddPatientScreen> {
                 color: AppColors.textPrimary,
               ),
             ),
-
             const SizedBox(height: AppDimensions.lg),
-
-            // Camera option
             _buildPhotoOption(
               icon: Icons.camera_alt,
               label: 'Take Photo',
@@ -168,10 +164,7 @@ class _AddPatientScreenState extends State<AddPatientScreen> {
                 _pickPhoto(ImageSource.camera);
               },
             ),
-
             const SizedBox(height: AppDimensions.md),
-
-            // Gallery option
             _buildPhotoOption(
               icon: Icons.photo_library,
               label: 'Choose from Gallery',
@@ -182,8 +175,6 @@ class _AddPatientScreenState extends State<AddPatientScreen> {
                 _pickPhoto(ImageSource.gallery);
               },
             ),
-
-            // Remove photo option if photo exists
             if (_selectedPhoto != null ||
                 _existingPhotoPath != null) ...[
               const SizedBox(height: AppDimensions.md),
@@ -201,9 +192,7 @@ class _AddPatientScreenState extends State<AddPatientScreen> {
                 },
               ),
             ],
-
             const SizedBox(height: AppDimensions.lg),
-
             TextButton(
               onPressed: () => Navigator.pop(context),
               child: Text(
@@ -240,9 +229,7 @@ class _AddPatientScreenState extends State<AddPatientScreen> {
             color: color.withOpacity(0.06),
             borderRadius:
                 BorderRadius.circular(AppDimensions.radiusLg),
-            border: Border.all(
-              color: color.withOpacity(0.2),
-            ),
+            border: Border.all(color: color.withOpacity(0.2)),
           ),
           child: Row(
             children: [
@@ -301,8 +288,6 @@ class _AddPatientScreenState extends State<AddPatientScreen> {
 
     try {
       final now = DateTime.now().toIso8601String();
-
-      // Use new photo path or keep existing
       final photoPath = _selectedPhoto?.path ?? _existingPhotoPath;
 
       final data = {
@@ -316,6 +301,8 @@ class _AddPatientScreenState extends State<AddPatientScreen> {
         DBConstants.patientNotes: _notesController.text.trim(),
         DBConstants.patientLanguage: _selectedLanguage,
         DBConstants.patientPhoto: photoPath,
+        
+        DBConstants.patientIsDevicePatient: 0,
         DBConstants.patientIsActive: 1,
         DBConstants.patientUpdatedAt: now,
       };
@@ -368,8 +355,7 @@ class _AddPatientScreenState extends State<AddPatientScreen> {
       if (mounted) setState(() => _isLoading = false);
     }
   }
-
-  @override
+    @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
@@ -430,6 +416,7 @@ class _AddPatientScreenState extends State<AddPatientScreen> {
 
                   const SizedBox(height: AppDimensions.md),
 
+                  // Age + Gender
                   Row(
                     children: [
                       Expanded(
@@ -443,7 +430,8 @@ class _AddPatientScreenState extends State<AddPatientScreen> {
                               controller: _ageController,
                               keyboardType: TextInputType.number,
                               inputFormatters: [
-                                FilteringTextInputFormatter.digitsOnly,
+                                FilteringTextInputFormatter
+                                    .digitsOnly,
                               ],
                               style: const TextStyle(
                                 fontFamily: 'Poppins',
@@ -482,8 +470,8 @@ class _AddPatientScreenState extends State<AddPatientScreen> {
                                         child: Text(g),
                                       ))
                                   .toList(),
-                              onChanged: (v) =>
-                                  setState(() => _selectedGender = v),
+                              onChanged: (v) => setState(
+                                  () => _selectedGender = v),
                             ),
                           ],
                         ),
@@ -537,7 +525,10 @@ class _AddPatientScreenState extends State<AddPatientScreen> {
 
               const SizedBox(height: AppDimensions.lg),
 
-              // ── Alert Contact Card ───────────────────
+              
+              const SizedBox(height: AppDimensions.lg),
+
+              // ── SMS Alert Card ───────────────────────
               _buildSectionCard(
                 title: 'SMS Alert Contact',
                 icon: Icons.sms_outlined,
@@ -549,7 +540,8 @@ class _AddPatientScreenState extends State<AddPatientScreen> {
                       borderRadius: BorderRadius.circular(
                           AppDimensions.radiusMd),
                       border: Border.all(
-                        color: AppColors.primaryBlue.withOpacity(0.2),
+                        color:
+                            AppColors.primaryBlue.withOpacity(0.2),
                       ),
                     ),
                     child: Row(
@@ -717,12 +709,10 @@ class _AddPatientScreenState extends State<AddPatientScreen> {
     return Center(
       child: Column(
         children: [
-          // Photo circle
           GestureDetector(
             onTap: _showPhotoOptions,
             child: Stack(
               children: [
-                // Photo or initial
                 Container(
                   width: 110,
                   height: 110,
@@ -762,8 +752,6 @@ class _AddPatientScreenState extends State<AddPatientScreen> {
                         )
                       : null,
                 ),
-
-                // Camera badge
                 Positioned(
                   bottom: 0,
                   right: 0,
@@ -788,9 +776,7 @@ class _AddPatientScreenState extends State<AddPatientScreen> {
               ],
             ),
           ),
-
           const SizedBox(height: AppDimensions.sm),
-
           Text(
             'Tap to add photo',
             style: TextStyle(
@@ -850,6 +836,7 @@ class _AddPatientScreenState extends State<AddPatientScreen> {
     );
   }
 
+  // ── Label ────────────────────────────────────────────────
   Widget _buildLabel(String text) {
     return Text(
       text,
@@ -862,6 +849,7 @@ class _AddPatientScreenState extends State<AddPatientScreen> {
     );
   }
 
+  // ── Input decoration ─────────────────────────────────────
   InputDecoration _inputDeco({
     required String hint,
     required IconData icon,

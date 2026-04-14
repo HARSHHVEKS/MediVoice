@@ -1,34 +1,27 @@
 import 'db_constants.dart';
 
-// ══════════════════════════════════════════════════════════
-// DB Tables — SQL CREATE statements for all tables
-// ══════════════════════════════════════════════════════════
-
 class DBTables {
 
-  // ── 1. PATIENTS TABLE ───────────────────────────────────
-  // Created by caregiver/nurse during consultation
-  // No passwords or PINs — just profile information
+  // ── 1. PATIENTS TABLE ─────────────────────────────────
   static String get createPatientsTable => '''
     CREATE TABLE ${DBConstants.tablePatients} (
-      ${DBConstants.patientId}          INTEGER PRIMARY KEY AUTOINCREMENT,
-      ${DBConstants.patientFullName}    TEXT    NOT NULL,
-      ${DBConstants.patientAge}         INTEGER,
-      ${DBConstants.patientGender}      TEXT,
-      ${DBConstants.patientPhoto}       TEXT,
-      ${DBConstants.patientLanguage}    TEXT    NOT NULL DEFAULT 'lg',
-      ${DBConstants.patientNotes}       TEXT,
-      ${DBConstants.patientWard}        TEXT,
-      ${DBConstants.patientAlertPhone}  TEXT,
-      ${DBConstants.patientIsActive}    INTEGER NOT NULL DEFAULT 1,
-      ${DBConstants.patientCreatedAt}   TEXT    NOT NULL,
-      ${DBConstants.patientUpdatedAt}   TEXT    NOT NULL
+      ${DBConstants.patientId}              INTEGER PRIMARY KEY AUTOINCREMENT,
+      ${DBConstants.patientFullName}        TEXT    NOT NULL,
+      ${DBConstants.patientAge}             INTEGER,
+      ${DBConstants.patientGender}          TEXT,
+      ${DBConstants.patientPhoto}           TEXT,
+      ${DBConstants.patientLanguage}        TEXT    NOT NULL DEFAULT 'lg',
+      ${DBConstants.patientNotes}           TEXT,
+      ${DBConstants.patientWard}            TEXT,
+      ${DBConstants.patientAlertPhone}      TEXT,
+      ${DBConstants.patientIsDevicePatient} INTEGER NOT NULL DEFAULT 0,
+      ${DBConstants.patientIsActive}        INTEGER NOT NULL DEFAULT 1,
+      ${DBConstants.patientCreatedAt}       TEXT    NOT NULL,
+      ${DBConstants.patientUpdatedAt}       TEXT    NOT NULL
     )
   ''';
 
-  // ── 2. MEDICATIONS TABLE ────────────────────────────────
-  // Each medicine belongs to one patient
-  // Has voice instruction recording path
+  // ── 2. MEDICATIONS TABLE ──────────────────────────────
   static String get createMedicationsTable => '''
     CREATE TABLE ${DBConstants.tableMedications} (
       ${DBConstants.medId}           INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -52,10 +45,7 @@ class DBTables {
     )
   ''';
 
-  // ── 3. REMINDER SCHEDULES TABLE ─────────────────────────
-  // When each medicine should be taken
-  // One medicine can have multiple times
-  // e.g. 8am, 2pm, 8pm
+  // ── 3. REMINDER SCHEDULES TABLE ───────────────────────
   static String get createReminderSchedulesTable => '''
     CREATE TABLE ${DBConstants.tableReminderSchedules} (
       ${DBConstants.schedId}        INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -73,9 +63,7 @@ class DBTables {
     )
   ''';
 
-  // ── 4. DOSE LOGS TABLE ──────────────────────────────────
-  // Every dose recorded — taken, missed, skipped
-  // Used for history and SMS alerts
+  // ── 4. DOSE LOGS TABLE ────────────────────────────────
   static String get createDoseLogsTable => '''
     CREATE TABLE ${DBConstants.tableDoseLogs} (
       ${DBConstants.logId}            INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -97,8 +85,7 @@ class DBTables {
     )
   ''';
 
-  // ── 5. ALERT CONTACTS TABLE ─────────────────────────────
-  // Family members who get SMS when dose missed
+  // ── 5. ALERT CONTACTS TABLE ───────────────────────────
   static String get createAlertContactsTable => '''
     CREATE TABLE ${DBConstants.tableAlertContacts} (
       ${DBConstants.contactId}           INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -115,8 +102,7 @@ class DBTables {
     )
   ''';
 
-  // ── 6. APP SETTINGS TABLE ───────────────────────────────
-  // Key-value store for app wide settings
+  // ── 6. APP SETTINGS TABLE ─────────────────────────────
   static String get createAppSettingsTable => '''
     CREATE TABLE ${DBConstants.tableAppSettings} (
       ${DBConstants.settingKey}       TEXT PRIMARY KEY,
@@ -125,14 +111,14 @@ class DBTables {
     )
   ''';
 
-  // ── Default settings inserted on first launch ────────────
+  // ── Default settings on first launch ──────────────────
   static List<String> get defaultSettings {
     final now = DateTime.now().toIso8601String();
     return [
-      "INSERT INTO app_settings (setting_key, setting_value, updated_at) VALUES ('current_patient_id', '', '$now')",
-      "INSERT INTO app_settings (setting_key, setting_value, updated_at) VALUES ('admin_pin', '123456', '$now')",
-      "INSERT INTO app_settings (setting_key, setting_value, updated_at) VALUES ('default_language', 'lg', '$now')",
-      "INSERT INTO app_settings (setting_key, setting_value, updated_at) VALUES ('missed_dose_delay_minutes', '30', '$now')",
+      "INSERT INTO ${DBConstants.tableAppSettings} VALUES ('${DBConstants.keyCurrentPatientId}', '', '$now')",
+      "INSERT INTO ${DBConstants.tableAppSettings} VALUES ('${DBConstants.keyAdminPin}', '123456', '$now')",
+      "INSERT INTO ${DBConstants.tableAppSettings} VALUES ('${DBConstants.keyDefaultLanguage}', 'lg', '$now')",
+      "INSERT INTO ${DBConstants.tableAppSettings} VALUES ('${DBConstants.keyMissedDoseDelay}', '30', '$now')",
     ];
   }
 }
