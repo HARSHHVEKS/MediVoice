@@ -7,8 +7,6 @@ import 'features/auth/screens/admin_login_screen.dart';
 import 'features/auth/screens/role_selection_screen.dart';
 import 'features/caregiver/screens/add_patient_screen.dart';
 import 'features/caregiver/screens/caregiver_profiles_screen.dart';
-import 'features/caregiver/screens/medication_list_screen.dart';
-import 'features/caregiver/screens/add_medication_screen.dart';
 import 'features/patient/screens/patient_home_screen.dart';
 import 'features/patient/screens/patient_register_screen.dart';
 import 'features/splash/splash_screen.dart';
