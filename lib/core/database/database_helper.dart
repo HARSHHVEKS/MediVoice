@@ -8,8 +8,7 @@ import 'db_tables.dart';
 class DatabaseHelper {
   // ── Singleton ─────────────────────────────────────────
   DatabaseHelper._privateConstructor();
-  static final DatabaseHelper instance =
-      DatabaseHelper._privateConstructor();
+  static final DatabaseHelper instance = DatabaseHelper._privateConstructor();
 
   static Database? _database;
 
@@ -108,20 +107,17 @@ class DatabaseHelper {
     final db = await database;
     return db.query(
       DBConstants.tablePatients,
-      where:
-          '${DBConstants.patientIsDevicePatient} = 0 AND '
+      where: '${DBConstants.patientIsDevicePatient} = 0 AND '
           '${DBConstants.patientIsActive} = 1',
       orderBy: DBConstants.patientFullName,
     );
   }
 
-
   Future<List<Map<String, dynamic>>> getDevicePatients() async {
     final db = await database;
     return db.query(
       DBConstants.tablePatients,
-      where:
-          '${DBConstants.patientIsDevicePatient} = 1 AND '
+      where: '${DBConstants.patientIsDevicePatient} = 1 AND '
           '${DBConstants.patientIsActive} = 1',
       orderBy: DBConstants.patientFullName,
     );
@@ -138,13 +134,43 @@ class DatabaseHelper {
     return results.isNotEmpty ? results.first : null;
   }
 
+  Future<List<Map<String, dynamic>>> getAlertContactsByPatient(
+    int patientId,
+  ) async {
+    final db = await database;
+    return db.query(
+      DBConstants.tableAlertContacts,
+      where: '${DBConstants.contactPatientId} = ? AND '
+          '${DBConstants.contactReceiveSms} = 1',
+      whereArgs: [patientId],
+      orderBy: '${DBConstants.contactIsPrimary} DESC, '
+          '${DBConstants.contactIsEmergency} DESC, '
+          '${DBConstants.contactId} ASC',
+    );
+  }
+
+  Future<String?> getPrimaryAlertPhone(int patientId) async {
+    final patient = await getPatientById(patientId);
+    final patientPhone = patient?[DBConstants.patientAlertPhone] as String?;
+    if (patientPhone != null && patientPhone.trim().isNotEmpty) {
+      return patientPhone.trim();
+    }
+
+    final contacts = await getAlertContactsByPatient(patientId);
+    if (contacts.isEmpty) return null;
+
+    final contactPhone = contacts.first[DBConstants.contactPhone] as String?;
+    return contactPhone?.trim().isNotEmpty == true
+        ? contactPhone!.trim()
+        : null;
+  }
+
   Future<int> updatePatient(
     int id,
     Map<String, dynamic> data,
   ) async {
     final db = await database;
-    data[DBConstants.patientUpdatedAt] =
-        DateTime.now().toIso8601String();
+    data[DBConstants.patientUpdatedAt] = DateTime.now().toIso8601String();
     return db.update(
       DBConstants.tablePatients,
       data,
@@ -159,8 +185,7 @@ class DatabaseHelper {
       DBConstants.tablePatients,
       {
         DBConstants.patientIsActive: 0,
-        DBConstants.patientUpdatedAt:
-            DateTime.now().toIso8601String(),
+        DBConstants.patientUpdatedAt: DateTime.now().toIso8601String(),
       },
       where: '${DBConstants.patientId} = ?',
       whereArgs: [id],
@@ -186,8 +211,7 @@ class DatabaseHelper {
     final db = await database;
     return db.query(
       DBConstants.tableMedications,
-      where:
-          '${DBConstants.medPatientId} = ? AND '
+      where: '${DBConstants.medPatientId} = ? AND '
           '${DBConstants.medIsActive} = 1',
       whereArgs: [patientId],
       orderBy: DBConstants.medName,
@@ -210,8 +234,7 @@ class DatabaseHelper {
     Map<String, dynamic> data,
   ) async {
     final db = await database;
-    data[DBConstants.medUpdatedAt] =
-        DateTime.now().toIso8601String();
+    data[DBConstants.medUpdatedAt] = DateTime.now().toIso8601String();
     return db.update(
       DBConstants.tableMedications,
       data,
@@ -226,8 +249,7 @@ class DatabaseHelper {
       DBConstants.tableMedications,
       {
         DBConstants.medIsActive: 0,
-        DBConstants.medUpdatedAt:
-            DateTime.now().toIso8601String(),
+        DBConstants.medUpdatedAt: DateTime.now().toIso8601String(),
       },
       where: '${DBConstants.medId} = ?',
       whereArgs: [id],
@@ -296,12 +318,74 @@ class DatabaseHelper {
       {
         DBConstants.logStatus: status,
         DBConstants.logConfirmedTime: confirmedTime,
-        DBConstants.logUpdatedAt:
-            DateTime.now().toIso8601String(),
+        DBConstants.logUpdatedAt: DateTime.now().toIso8601String(),
       },
       where: '${DBConstants.logId} = ?',
       whereArgs: [logId],
     );
+  }
+
+  Future<int> updateDoseLog(
+    int logId,
+    Map<String, dynamic> data,
+  ) async {
+    final db = await database;
+    data[DBConstants.logUpdatedAt] = DateTime.now().toIso8601String();
+    return db.update(
+      DBConstants.tableDoseLogs,
+      data,
+      where: '${DBConstants.logId} = ?',
+      whereArgs: [logId],
+    );
+  }
+
+  Future<Map<String, dynamic>?> getDoseLogForSchedule({
+    required int medicationId,
+    required int patientId,
+    required String scheduledTime,
+  }) async {
+    final db = await database;
+    final results = await db.query(
+      DBConstants.tableDoseLogs,
+      where: '${DBConstants.logMedId} = ? AND '
+          '${DBConstants.logPatientId} = ? AND '
+          '${DBConstants.logScheduledTime} = ?',
+      whereArgs: [medicationId, patientId, scheduledTime],
+      orderBy: '${DBConstants.logCreatedAt} DESC',
+      limit: 1,
+    );
+    return results.isNotEmpty ? results.first : null;
+  }
+
+  Future<int> ensurePendingDoseLog({
+    required int medicationId,
+    required int patientId,
+    required String scheduledTime,
+    int? scheduleId,
+    String method = 'notification',
+  }) async {
+    final existing = await getDoseLogForSchedule(
+      medicationId: medicationId,
+      patientId: patientId,
+      scheduledTime: scheduledTime,
+    );
+
+    if (existing != null) {
+      return existing[DBConstants.logId] as int;
+    }
+
+    final now = DateTime.now().toIso8601String();
+    return insertDoseLog({
+      DBConstants.logMedId: medicationId,
+      DBConstants.logPatientId: patientId,
+      DBConstants.logScheduleId: scheduleId,
+      DBConstants.logScheduledTime: scheduledTime,
+      DBConstants.logStatus: DBConstants.statusPending,
+      DBConstants.logMethod: method,
+      DBConstants.logSmsAlert: 0,
+      DBConstants.logCreatedAt: now,
+      DBConstants.logUpdatedAt: now,
+    });
   }
 
   Future<List<Map<String, dynamic>>> getDoseLogsByPatient(
@@ -341,8 +425,7 @@ class DatabaseHelper {
       {
         DBConstants.settingKey: key,
         DBConstants.settingValue: value,
-        DBConstants.settingUpdatedAt:
-            DateTime.now().toIso8601String(),
+        DBConstants.settingUpdatedAt: DateTime.now().toIso8601String(),
       },
       conflictAlgorithm: ConflictAlgorithm.replace,
     );
@@ -361,8 +444,7 @@ class DatabaseHelper {
   }
 
   Future<int?> getCurrentPatientId() async {
-    final value =
-        await getSetting(DBConstants.keyCurrentPatientId);
+    final value = await getSetting(DBConstants.keyCurrentPatientId);
     if (value == null || value.isEmpty) return null;
     return int.tryParse(value);
   }

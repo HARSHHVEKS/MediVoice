@@ -5,16 +5,21 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:timezone/timezone.dart' as tz;
 import 'package:timezone/data/latest.dart' as tz_data;
 
+import '../database/database_helper.dart';
+import '../database/db_constants.dart';
+import '../navigation/app_navigator.dart';
+import '../../features/patient/screens/dose_confirmation_screen.dart';
+
 class NotificationService {
   // ── Singleton ─────────────────────────────────────────
   NotificationService._();
-  static final NotificationService instance =
-      NotificationService._();
+  static final NotificationService instance = NotificationService._();
 
   final FlutterLocalNotificationsPlugin _plugin =
       FlutterLocalNotificationsPlugin();
 
   bool _initialized = false;
+  String? _launchPayload;
 
   // ══════════════════════════════════════════════════════
   //  INITIALIZE — call once in main.dart
@@ -41,6 +46,11 @@ class NotificationService {
       onDidReceiveNotificationResponse: _onNotificationTap,
     );
 
+    final launchDetails = await _plugin.getNotificationAppLaunchDetails();
+    if (launchDetails?.didNotificationLaunchApp == true) {
+      _launchPayload = launchDetails?.notificationResponse?.payload;
+    }
+
     // Request permission Android 13+
     await _plugin
         .resolvePlatformSpecificImplementation<
@@ -62,6 +72,76 @@ class NotificationService {
     debugPrint(
       '🔔 NOTIFICATION TAPPED: ${response.payload}',
     );
+    _openDoseConfirmationFromPayload(response.payload);
+  }
+
+  Future<void> processPendingLaunchPayload() async {
+    final payload = _launchPayload;
+    if (payload == null || payload.isEmpty) return;
+    _launchPayload = null;
+    await _openDoseConfirmationFromPayload(payload);
+  }
+
+  Future<void> _openDoseConfirmationFromPayload(
+    String? payload,
+  ) async {
+    if (payload == null || payload.isEmpty) return;
+
+    final parts = payload.split('|');
+    if (parts.length < 4) return;
+
+    final patientId = int.tryParse(parts[0]);
+    final medicationId = int.tryParse(parts[1]);
+    final timeToken = parts[2];
+    final reminderStage = int.tryParse(parts[3]) ?? 1;
+
+    if (patientId == null || medicationId == null) return;
+
+    final patient = await DatabaseHelper.instance.getPatientById(patientId);
+    final medication =
+        await DatabaseHelper.instance.getMedicationById(medicationId);
+
+    final navigator = appNavigatorKey.currentState;
+    if (navigator == null || patient == null || medication == null) {
+      return;
+    }
+
+    final scheduledDateTime = reminderStage == 2
+        ? DateTime.tryParse(timeToken) ?? DateTime.now()
+        : _scheduledDateTimeFromClock(timeToken);
+
+    await navigator.push(
+      MaterialPageRoute<void>(
+        builder: (_) => DoseConfirmationScreen(
+          medication: medication,
+          patientId: patientId,
+          patientName:
+              patient[DBConstants.patientFullName] as String? ?? 'Patient',
+          scheduledTime: scheduledDateTime.toIso8601String(),
+          autoPlayReminder: true,
+          reminderStage: reminderStage,
+        ),
+      ),
+    );
+  }
+
+  DateTime _scheduledDateTimeFromClock(String timeToken) {
+    final now = DateTime.now();
+    final timeParts = timeToken.split(':');
+    final hour = timeParts.isNotEmpty
+        ? int.tryParse(timeParts[0]) ?? now.hour
+        : now.hour;
+    final minute = timeParts.length > 1
+        ? int.tryParse(timeParts[1]) ?? now.minute
+        : now.minute;
+
+    return DateTime(
+      now.year,
+      now.month,
+      now.day,
+      hour,
+      minute,
+    );
   }
 
   // ══════════════════════════════════════════════════════
@@ -69,6 +149,8 @@ class NotificationService {
   // ══════════════════════════════════════════════════════
   Future<void> scheduleMedicineReminder({
     required int notificationId,
+    required int patientId,
+    required int medicationId,
     required String medicineName,
     required String dosage,
     required String unit,
@@ -91,21 +173,24 @@ class NotificationService {
 
     // If time already passed today → schedule tomorrow
     if (scheduledDate.isBefore(now)) {
-      scheduledDate = scheduledDate
-          .add(const Duration(days: 1));
+      scheduledDate = scheduledDate.add(const Duration(days: 1));
     }
 
     const androidDetails = AndroidNotificationDetails(
       'medivoice_reminders',
       'Medicine Reminders',
-      channelDescription:
-          'Reminders to take your medicine on time',
+      channelDescription: 'Reminders to take your medicine on time',
       importance: Importance.max,
       priority: Priority.high,
       fullScreenIntent: true,
+      category: AndroidNotificationCategory.alarm,
       ticker: 'Medicine Reminder',
       playSound: true,
       enableVibration: true,
+      visibility: NotificationVisibility.public,
+      autoCancel: false,
+      ongoing: true,
+      audioAttributesUsage: AudioAttributesUsage.alarm,
       icon: '@mipmap/ic_launcher',
     );
 
@@ -119,11 +204,11 @@ class NotificationService {
       'Take your $medicineName — $dosage $unit',
       scheduledDate,
       notificationDetails,
-      androidScheduleMode:
-          AndroidScheduleMode.exactAllowWhileIdle,
-      matchDateTimeComponents:
-          DateTimeComponents.time, // repeat daily
-      payload: '$notificationId|$medicineName',
+      androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
+      matchDateTimeComponents: DateTimeComponents.time, // repeat daily
+      payload: '$patientId|$medicationId|'
+          '${time.hour.toString().padLeft(2, '0')}:'
+          '${time.minute.toString().padLeft(2, '0')}|1',
       uiLocalNotificationDateInterpretation:
           UILocalNotificationDateInterpretation.absoluteTime,
     );
@@ -141,6 +226,7 @@ class NotificationService {
   //  Call this after saving medication + time slots
   // ══════════════════════════════════════════════════════
   Future<void> scheduleAllReminders({
+    required int patientId,
     required int medicationId,
     required String medicineName,
     required String dosage,
@@ -155,10 +241,12 @@ class NotificationService {
 
       await scheduleMedicineReminder(
         notificationId: notifId,
-        medicineName:   medicineName,
-        dosage:         dosage,
-        unit:           unit,
-        time:           timeSlots[i],
+        patientId: patientId,
+        medicationId: medicationId,
+        medicineName: medicineName,
+        dosage: dosage,
+        unit: unit,
+        time: timeSlots[i],
       );
     }
   }
@@ -176,6 +264,71 @@ class NotificationService {
       await _plugin.cancel(notifId);
       debugPrint('🗑️ ALARM CANCELLED: ID $notifId');
     }
+  }
+
+  Future<void> scheduleSecondReminder({
+    required int patientId,
+    required int medicationId,
+    required String medicineName,
+    required String dosage,
+    required String unit,
+    required DateTime originalScheduledTime,
+    int minutesLater = 10,
+  }) async {
+    if (!_initialized) await initialize();
+
+    final scheduledDate = tz.TZDateTime.from(
+      originalScheduledTime.add(Duration(minutes: minutesLater)),
+      tz.local,
+    );
+
+    const androidDetails = AndroidNotificationDetails(
+      'medivoice_follow_up_reminders',
+      'Follow-up Medicine Reminders',
+      channelDescription: 'Second reminders for unconfirmed medicine doses',
+      importance: Importance.max,
+      priority: Priority.high,
+      fullScreenIntent: true,
+      category: AndroidNotificationCategory.alarm,
+      playSound: true,
+      enableVibration: true,
+      visibility: NotificationVisibility.public,
+      autoCancel: false,
+      ongoing: true,
+      audioAttributesUsage: AudioAttributesUsage.alarm,
+      icon: '@mipmap/ic_launcher',
+    );
+
+    await _plugin.zonedSchedule(
+      _secondReminderId(medicationId, originalScheduledTime),
+      'Medicine reminder',
+      'Please take $medicineName $dosage $unit',
+      scheduledDate,
+      const NotificationDetails(android: androidDetails),
+      androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
+      uiLocalNotificationDateInterpretation:
+          UILocalNotificationDateInterpretation.absoluteTime,
+      payload:
+          '$patientId|$medicationId|${originalScheduledTime.toIso8601String()}|2',
+    );
+  }
+
+  Future<void> cancelSecondReminder({
+    required int medicationId,
+    required DateTime originalScheduledTime,
+  }) async {
+    await _plugin.cancel(
+      _secondReminderId(medicationId, originalScheduledTime),
+    );
+  }
+
+  int _secondReminderId(
+    int medicationId,
+    DateTime originalScheduledTime,
+  ) {
+    final minutesOfDay =
+        (originalScheduledTime.hour * 60) + originalScheduledTime.minute;
+    return 500000 + (medicationId * 1000) + minutesOfDay;
   }
 
   Future<void> cancelAll() async {
@@ -196,8 +349,7 @@ class NotificationService {
     const androidDetails = AndroidNotificationDetails(
       'medivoice_reminders',
       'Medicine Reminders',
-      channelDescription:
-          'Reminders to take your medicine on time',
+      channelDescription: 'Reminders to take your medicine on time',
       importance: Importance.max,
       priority: Priority.high,
       fullScreenIntent: true,

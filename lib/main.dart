@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import 'core/database/database_helper.dart';
+import 'core/navigation/app_navigator.dart';
 import 'core/services/notification_service.dart'; // ← NEW
 import 'core/theme/app_theme.dart';
 import 'features/auth/screens/admin_login_screen.dart';
@@ -22,16 +23,18 @@ void main() async {
   ]);
 
   // Initialize database on startup
-  final dbWorking =
-      await DatabaseHelper.instance.isDatabaseWorking();
-  debugPrint(dbWorking
-      ? '✅ DATABASE: Ready!'
-      : '❌ DATABASE: Something went wrong!');
+  final dbWorking = await DatabaseHelper.instance.isDatabaseWorking();
+  debugPrint(
+      dbWorking ? '✅ DATABASE: Ready!' : '❌ DATABASE: Something went wrong!');
 
   // Initialize notifications ← NEW
   await NotificationService.instance.initialize();
 
   runApp(const MediVoiceApp());
+
+  WidgetsBinding.instance.addPostFrameCallback((_) {
+    NotificationService.instance.processPendingLaunchPayload();
+  });
 }
 
 class MediVoiceApp extends StatelessWidget {
@@ -39,24 +42,19 @@ class MediVoiceApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => MaterialApp(
+        navigatorKey: appNavigatorKey,
         title: 'MediVoice',
         theme: AppTheme.lightTheme,
         debugShowCheckedModeBanner: false,
         initialRoute: '/',
         routes: {
           '/': (context) => const SplashScreen(),
-          '/role-selection': (context) =>
-              const RoleSelectionScreen(),
-          '/patient-register': (context) =>
-              const PatientRegisterScreen(),
-          '/patient-home': (context) =>
-              const PatientHomeScreen(),
-          '/caregiver-profiles': (context) =>
-              const CaregiverProfilesScreen(),
-          '/add-patient': (context) =>
-              const AddPatientScreen(),
-          '/admin-login': (context) =>
-              const AdminLoginScreen(),
+          '/role-selection': (context) => const RoleSelectionScreen(),
+          '/patient-register': (context) => const PatientRegisterScreen(),
+          '/patient-home': (context) => const PatientHomeScreen(),
+          '/caregiver-profiles': (context) => const CaregiverProfilesScreen(),
+          '/add-patient': (context) => const AddPatientScreen(),
+          '/admin-login': (context) => const AdminLoginScreen(),
         },
         onUnknownRoute: (settings) => MaterialPageRoute(
           builder: (_) => const RoleSelectionScreen(),

@@ -1,41 +1,52 @@
 // ignore_for_file: deprecated_member_use
 
+import 'dart:async';
 import 'dart:io';
+
 import 'package:flutter/material.dart';
+
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_dimensions.dart';
 import '../../../core/database/database_helper.dart';
 import '../../../core/database/db_constants.dart';
+import '../../../core/services/alarm_audio_service.dart';
+import '../../../core/services/notification_service.dart';
+import '../../../core/services/sms_service.dart';
 
 class DoseConfirmationScreen extends StatefulWidget {
-
   const DoseConfirmationScreen({
     super.key,
     required this.medication,
     required this.patientId,
     required this.patientName,
+    this.scheduledTime,
+    this.autoPlayReminder = false,
+    this.reminderStage = 1,
   });
+
   final Map<String, dynamic> medication;
   final int patientId;
   final String patientName;
+  final String? scheduledTime;
+  final bool autoPlayReminder;
+  final int reminderStage;
 
   @override
-  State<DoseConfirmationScreen> createState() =>
-      _DoseConfirmationScreenState();
+  State<DoseConfirmationScreen> createState() => _DoseConfirmationScreenState();
 }
 
-class _DoseConfirmationScreenState
-    extends State<DoseConfirmationScreen>
+class _DoseConfirmationScreenState extends State<DoseConfirmationScreen>
     with TickerProviderStateMixin {
-
-  // ── Database ──────────────────────────────────────────
   final _db = DatabaseHelper.instance;
 
-  // ── State ─────────────────────────────────────────────
-  bool _isLoading     = false;
-  bool _showSuccess   = false;
+  bool _isLoading = false;
+  bool _showSuccess = false;
+  bool _showMissed = false;
+  bool _isReminderLoopActive = false;
+  bool _isEscalating = false;
+  int? _doseLogId;
+  String? _alertPhone;
 
-  // ── Animations ────────────────────────────────────────
   late AnimationController _floatController;
   late AnimationController _pulseController;
   late AnimationController _successController;
@@ -45,11 +56,14 @@ class _DoseConfirmationScreenState
   late Animation<double> _successScaleAnim;
   late Animation<double> _successFadeAnim;
 
+  bool get _isSecondReminder => widget.reminderStage == 2;
+  String get _takeButtonText => 'TAKEN';
+  String get _laterButtonText => _isSecondReminder ? 'Close' : 'Later';
+
   @override
   void initState() {
     super.initState();
 
-    // Pill floating up/down
     _floatController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 2200),
@@ -63,7 +77,6 @@ class _DoseConfirmationScreenState
       curve: Curves.easeInOut,
     ));
 
-    // Button gentle pulse
     _pulseController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 1000),
@@ -77,7 +90,6 @@ class _DoseConfirmationScreenState
       curve: Curves.easeInOut,
     ));
 
-    // Success tick animation
     _successController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 600),
@@ -98,70 +110,287 @@ class _DoseConfirmationScreenState
       parent: _successController,
       curve: Curves.easeIn,
     ));
+
+    _prepareReminderState();
   }
 
   @override
   void dispose() {
+    AlarmAudioService.instance.stopAlarm();
+    AlarmAudioService.instance.stopPlayback();
+    AlarmAudioService.instance.stopVibration();
     _floatController.dispose();
     _pulseController.dispose();
     _successController.dispose();
     super.dispose();
   }
 
-  // ══════════════════════════════════════════════════════
-  //  TAKE DOSE — logs to DB then shows success
-  // ══════════════════════════════════════════════════════
+  Future<void> _prepareReminderState() async {
+    final medId = widget.medication[DBConstants.medId] as int;
+    final scheduledDateTime = _scheduledDateTime();
+
+    final logId = await _db.ensurePendingDoseLog(
+      medicationId: medId,
+      patientId: widget.patientId,
+      scheduledTime: scheduledDateTime.toIso8601String(),
+    );
+
+    final alertPhone = await _db.getPrimaryAlertPhone(widget.patientId);
+
+    if (!mounted) return;
+    setState(() {
+      _doseLogId = logId;
+      _alertPhone = alertPhone;
+    });
+
+    if (widget.autoPlayReminder) {
+      unawaited(_startReminderLoop());
+    }
+  }
+
+  DateTime _scheduledDateTime() {
+    final raw = widget.scheduledTime;
+    if (raw == null || raw.isEmpty) {
+      final now = DateTime.now();
+      return DateTime(
+        now.year,
+        now.month,
+        now.day,
+        now.hour,
+        now.minute,
+      );
+    }
+
+    return DateTime.tryParse(raw) ?? DateTime.now();
+  }
+
+  Future<void> _startReminderLoop() async {
+    if (_isReminderLoopActive || _showSuccess || _showMissed) return;
+
+    final audioPath = widget.medication[DBConstants.medAudioPath] as String?;
+    final reminderDeadline = DateTime.now().add(
+      const Duration(minutes: 1),
+    );
+
+    setState(() => _isReminderLoopActive = true);
+
+    try {
+      await AlarmAudioService.instance.stopPlayback();
+      await AlarmAudioService.instance.stopAlarm();
+      await AlarmAudioService.instance.startVibration();
+
+      while (_isReminderLoopActive &&
+          mounted &&
+          DateTime.now().isBefore(reminderDeadline)) {
+        final alarmRemaining = reminderDeadline.difference(DateTime.now());
+        if (alarmRemaining <= Duration.zero) break;
+
+        await AlarmAudioService.instance.playAlarm();
+        final alarmStep = await _waitForReminderStep(
+          alarmRemaining < const Duration(seconds: 6)
+              ? alarmRemaining
+              : const Duration(seconds: 6),
+        );
+        await AlarmAudioService.instance.stopAlarm();
+        if (!alarmStep) break;
+
+        if (audioPath != null && audioPath.isNotEmpty) {
+          final durationMs =
+              await AlarmAudioService.instance.playRecording(audioPath);
+          final voiceRemaining = reminderDeadline.difference(DateTime.now());
+          if (voiceRemaining <= Duration.zero) break;
+
+          final voiceLength = Duration(
+            milliseconds: (durationMs ?? 5000).clamp(1000, 600000),
+          );
+          final voiceStep = await _waitForReminderStep(
+            voiceRemaining < voiceLength ? voiceRemaining : voiceLength,
+          );
+          await AlarmAudioService.instance.stopPlayback();
+          if (!voiceStep) break;
+        } else {
+          final keepLooping = await _waitForReminderStep(
+            const Duration(milliseconds: 400),
+          );
+          if (!keepLooping) break;
+        }
+      }
+    } catch (e) {
+      debugPrint('❌ REMINDER LOOP ERROR: $e');
+    } finally {
+      await AlarmAudioService.instance.stopAlarm();
+      await AlarmAudioService.instance.stopPlayback();
+      await AlarmAudioService.instance.stopVibration();
+      if (!mounted) return;
+      setState(() => _isReminderLoopActive = false);
+    }
+
+    if (_showSuccess || _showMissed || _isEscalating || !mounted) {
+      return;
+    }
+
+    if (_isSecondReminder) {
+      await _markDoseMissedAndSendSms();
+    } else {
+      await _scheduleSecondReminderAndExit();
+    }
+  }
+
+  Future<bool> _waitForReminderStep(Duration duration) async {
+    var remaining = duration;
+    const tick = Duration(milliseconds: 200);
+
+    while (_isReminderLoopActive && remaining > Duration.zero) {
+      final delay = remaining < tick ? remaining : tick;
+      await Future<void>.delayed(delay);
+      remaining -= delay;
+    }
+
+    return _isReminderLoopActive;
+  }
+
+  Future<void> _stopReminderLoop() async {
+    _isReminderLoopActive = false;
+    await AlarmAudioService.instance.stopAlarm();
+    await AlarmAudioService.instance.stopPlayback();
+    await AlarmAudioService.instance.stopVibration();
+  }
+
+  Future<void> _scheduleSecondReminderAndExit() async {
+    if (_isEscalating) return;
+    _isEscalating = true;
+
+    try {
+      await _stopReminderLoop();
+
+      final med = widget.medication;
+      await NotificationService.instance.scheduleSecondReminder(
+        patientId: widget.patientId,
+        medicationId: med[DBConstants.medId] as int,
+        medicineName: med[DBConstants.medName] as String? ?? 'Medicine',
+        dosage: med[DBConstants.medDosage] as String? ?? '',
+        unit: med[DBConstants.medDosageUnit] as String? ?? '',
+        originalScheduledTime: _scheduledDateTime(),
+      );
+
+      if (!mounted) return;
+      Navigator.pop(context);
+    } finally {
+      _isEscalating = false;
+    }
+  }
+
+  Future<void> _markDoseMissedAndSendSms() async {
+    if (_isEscalating || _showSuccess || _showMissed) return;
+    _isEscalating = true;
+
+    try {
+      await _stopReminderLoop();
+
+      final logId = _doseLogId;
+      if (logId != null) {
+        await _db.updateDoseLog(
+          logId,
+          {
+            DBConstants.logStatus: DBConstants.statusMissed,
+            DBConstants.logMethod: 'second-alarm-missed',
+            DBConstants.logSmsAlert: 0,
+          },
+        );
+      }
+
+      final smsSent = await _sendMissedDoseSms();
+
+      if (logId != null) {
+        await _db.updateDoseLog(
+          logId,
+          {
+            DBConstants.logSmsAlert: smsSent ? 1 : 0,
+          },
+        );
+      }
+
+      if (!mounted) return;
+      setState(() => _showMissed = true);
+      await Future<void>.delayed(const Duration(seconds: 2));
+      if (!mounted) return;
+      Navigator.pop(context);
+    } finally {
+      _isEscalating = false;
+    }
+  }
+
+  Future<bool> _sendMissedDoseSms() async {
+    final phone = _alertPhone;
+    if (phone == null || phone.isEmpty) return false;
+
+    final medName =
+        widget.medication[DBConstants.medName] as String? ?? 'medicine';
+    final dosage = widget.medication[DBConstants.medDosage] as String? ?? '';
+    final unit = widget.medication[DBConstants.medDosageUnit] as String? ?? '';
+
+    final message = 'Missed dose alert: ${widget.patientName} has not taken '
+        '$medName $dosage $unit.';
+
+    try {
+      return await SmsService.instance.sendSms(
+        phoneNumber: phone,
+        message: message,
+      );
+    } catch (e) {
+      debugPrint('❌ SMS SEND ERROR: $e');
+      return false;
+    }
+  }
+
   Future<void> _confirmDoseTaken() async {
     if (_isLoading) return;
     setState(() => _isLoading = true);
 
     try {
-      final now = DateTime.now();
-      final nowStr = now.toIso8601String();
+      final nowStr = DateTime.now().toIso8601String();
+      final medId = widget.medication[DBConstants.medId] as int;
+      final scheduledTime = _scheduledDateTime();
 
-      // Build scheduled time string for today
-      // We use current time as scheduled time
-      // (notification phase will pass exact scheduled time)
-      final scheduledStr =
-          '${now.hour.toString().padLeft(2, '0')}:'
-          '${now.minute.toString().padLeft(2, '0')}';
-
-      await _db.insertDoseLog({
-        DBConstants.logMedId:
-            widget.medication[DBConstants.medId] as int,
-        DBConstants.logPatientId:   widget.patientId,
-        DBConstants.logScheduledTime: scheduledStr,
-        DBConstants.logConfirmedTime: nowStr,
-        DBConstants.logStatus:      DBConstants.statusTaken,
-        DBConstants.logMethod:      'button',
-        DBConstants.logSmsAlert:    0,
-        DBConstants.logCreatedAt:   nowStr,
-        DBConstants.logUpdatedAt:   nowStr,
-      });
-
-      debugPrint(
-        '✅ DOSE LOGGED: ${widget.medication[DBConstants.medName]}'
-        ' → taken at $nowStr',
+      await _stopReminderLoop();
+      await NotificationService.instance.cancelSecondReminder(
+        medicationId: medId,
+        originalScheduledTime: scheduledTime,
       );
 
-      // Stop pill float, stop button pulse
+      final existingLogId = _doseLogId ??
+          await _db.ensurePendingDoseLog(
+            medicationId: medId,
+            patientId: widget.patientId,
+            scheduledTime: scheduledTime.toIso8601String(),
+            method: widget.autoPlayReminder ? 'notification' : 'manual-open',
+          );
+
+      await _db.updateDoseLog(
+        existingLogId,
+        {
+          DBConstants.logConfirmedTime: nowStr,
+          DBConstants.logStatus: DBConstants.statusTaken,
+          DBConstants.logMethod: _isSecondReminder
+              ? 'second-alarm-confirmation'
+              : 'alarm-confirmation',
+          DBConstants.logSmsAlert: 0,
+        },
+      );
+
       _floatController.stop();
       _pulseController.stop();
 
-      // Show success overlay
       setState(() {
-        _isLoading   = false;
+        _isLoading = false;
         _showSuccess = true;
       });
 
       _successController.forward();
-
-      // Wait 1.8s showing success, then pop back
-      await Future.delayed(const Duration(milliseconds: 1800));
+      await Future<void>.delayed(const Duration(milliseconds: 1800));
 
       if (!mounted) return;
       Navigator.pop(context);
-
     } catch (e) {
       debugPrint('❌ DOSE LOG ERROR: $e');
       if (!mounted) return;
@@ -179,81 +408,73 @@ class _DoseConfirmationScreenState
     }
   }
 
-  // ══════════════════════════════════════════════════════
-  //  SNOOZE — just go back, notification phase handles it
-  // ══════════════════════════════════════════════════════
-  void _snooze() {
-    debugPrint('⏰ SNOOZE: Will remind in 30 minutes');
-    Navigator.pop(context);
+  Future<void> _handleLater() async {
+    if (_isSecondReminder) {
+      await _markDoseMissedAndSendSms();
+      return;
+    }
+
+    await _scheduleSecondReminderAndExit();
   }
 
-  // ══════════════════════════════════════════════════════
-  //  HELPERS
-  // ══════════════════════════════════════════════════════
   Color _getPillColor(String? colorName) {
     switch (colorName?.toLowerCase()) {
-      case 'red':    return AppColors.pillRed;
-      case 'blue':   return AppColors.pillBlue;
-      case 'green':  return AppColors.pillGreen;
-      case 'yellow': return AppColors.pillYellow;
-      case 'orange': return AppColors.pillOrange;
-      case 'purple': return AppColors.pillPurple;
-      case 'pink':   return AppColors.pillPink;
-      case 'white':  return AppColors.pillWhite;
-      case 'brown':  return AppColors.pillBrown;
-      default:       return AppColors.primaryBlue;
+      case 'red':
+        return AppColors.pillRed;
+      case 'blue':
+        return AppColors.pillBlue;
+      case 'green':
+        return AppColors.pillGreen;
+      case 'yellow':
+        return AppColors.pillYellow;
+      case 'orange':
+        return AppColors.pillOrange;
+      case 'purple':
+        return AppColors.pillPurple;
+      case 'pink':
+        return AppColors.pillPink;
+      case 'white':
+        return AppColors.pillWhite;
+      case 'brown':
+        return AppColors.pillBrown;
+      default:
+        return AppColors.primaryBlue;
     }
   }
 
-  // ══════════════════════════════════════════════════════
-  //  BUILD
-  // ══════════════════════════════════════════════════════
   @override
   Widget build(BuildContext context) {
-    final med         = widget.medication;
-    final name        = med[DBConstants.medName]
-        as String? ?? 'Medicine';
-    final dosage      = med[DBConstants.medDosage]
-        as String? ?? '';
-    final unit        = med[DBConstants.medDosageUnit]
-        as String? ?? '';
-    final instructions = med[DBConstants.medInstructions]
-        as String?;
-    final frequency   = med[DBConstants.medFrequency]
-        as String? ?? '';
-    final colorName   = med[DBConstants.medPillColor]
-        as String?;
-    final shape       = med[DBConstants.medPillShape]
-        as String? ?? 'tablet';
-    final photoPath   = med[DBConstants.medPillPhoto]
-        as String?;
-    final pillColor   = _getPillColor(colorName);
+    final med = widget.medication;
+    final name = med[DBConstants.medName] as String? ?? 'Medicine';
+    final dosage = med[DBConstants.medDosage] as String? ?? '';
+    final unit = med[DBConstants.medDosageUnit] as String? ?? '';
+    final instructions = med[DBConstants.medInstructions] as String?;
+    final colorName = med[DBConstants.medPillColor] as String?;
+    final shape = med[DBConstants.medPillShape] as String? ?? 'tablet';
+    final photoPath = med[DBConstants.medPillPhoto] as String?;
+    final hasAudio =
+        (med[DBConstants.medAudioPath] as String?)?.isNotEmpty == true;
+    final pillColor = _getPillColor(colorName);
 
     return Scaffold(
       body: Stack(
         children: [
-
-          // ── Background gradient ──────────────────
           Container(
             decoration: const BoxDecoration(
               gradient: LinearGradient(
                 begin: Alignment.topCenter,
                 end: Alignment.bottomCenter,
                 colors: [
-                  Color(0xFF1B5E20), // deep green top
-                  Color(0xFF2E7D32), // mid green
-                  Color(0xFF43A047), // lighter green bottom
+                  Color(0xFF1B5E20),
+                  Color(0xFF2E7D32),
+                  Color(0xFF43A047),
                 ],
               ),
             ),
           ),
-
-          // ── Main content ─────────────────────────
           SafeArea(
             child: Column(
               children: [
-
-                // Back button row
                 Align(
                   alignment: Alignment.topLeft,
                   child: IconButton(
@@ -265,162 +486,137 @@ class _DoseConfirmationScreenState
                     onPressed: () => Navigator.pop(context),
                   ),
                 ),
-
-                // ── TOP: Pill visual area ────────────
                 Expanded(
                   flex: 4,
                   child: Center(
-                    child: Column(
-                      mainAxisAlignment:
-                          MainAxisAlignment.center,
-                      children: [
-
-                        // "Time to take your medicine"
-                        Container(
-                          padding:
-                              const EdgeInsets.symmetric(
-                            horizontal: 16,
-                            vertical: 8,
-                          ),
-                          decoration: BoxDecoration(
-                            color: Colors.white
-                                .withOpacity(0.15),
-                            borderRadius:
-                                BorderRadius.circular(20),
-                          ),
-                          child: const Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(
-                                Icons.access_time,
-                                color: Colors.white,
-                                size: 16,
-                              ),
-                              SizedBox(width: 6),
-                              Text(
-                                'Time for your medicine',
-                                style: TextStyle(
-                                  fontFamily: 'Poppins',
-                                  fontSize: 14,
+                    child: SingleChildScrollView(
+                      padding: const EdgeInsets.only(bottom: 12),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 14,
+                              vertical: 7,
+                            ),
+                            decoration: BoxDecoration(
+                              color: Colors.white.withOpacity(0.15),
+                              borderRadius: BorderRadius.circular(20),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(
+                                  Icons.access_time,
                                   color: Colors.white,
-                                  fontWeight: FontWeight.w500,
+                                  size: 15,
                                 ),
-                              ),
-                            ],
-                          ),
-                        ),
-
-                        const SizedBox(height: 32),
-
-                        // Floating pill visual
-                        AnimatedBuilder(
-                          animation: _floatAnim,
-                          builder: (context, child) =>
-                              Transform.translate(
-                            offset:
-                                Offset(0, _floatAnim.value),
-                            child: child,
-                          ),
-                          child: _buildLargePillVisual(
-                            photoPath: photoPath,
-                            shape: shape,
-                            color: pillColor,
-                          ),
-                        ),
-
-                        const SizedBox(height: 32),
-
-                        // Medicine name
-                        Padding(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: AppDimensions.xl,
-                          ),
-                          child: Text(
-                            name,
-                            textAlign: TextAlign.center,
-                            style: const TextStyle(
-                              fontFamily: 'Poppins',
-                              fontSize: 28,
-                              fontWeight: FontWeight.w800,
-                              color: Colors.white,
-                              height: 1.2,
+                                const SizedBox(width: 4),
+                                Text(
+                                  _isSecondReminder
+                                      ? 'Medicine time again'
+                                      : 'Medicine time',
+                                  style: const TextStyle(
+                                    fontFamily: 'Poppins',
+                                    fontSize: 13,
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
-                        ),
-
-                        const SizedBox(height: 8),
-
-                        // Dosage
-                        Text(
-                          '$dosage $unit',
-                          style: TextStyle(
-                            fontFamily: 'Poppins',
-                            fontSize: 20,
-                            fontWeight: FontWeight.w600,
-                            color: Colors.white
-                                .withOpacity(0.9),
+                          const SizedBox(height: 22),
+                          AnimatedBuilder(
+                            animation: _floatAnim,
+                            builder: (context, child) => Transform.translate(
+                              offset: Offset(0, _floatAnim.value),
+                              child: child,
+                            ),
+                            child: _buildLargePillVisual(
+                              photoPath: photoPath,
+                              shape: shape,
+                              color: pillColor,
+                            ),
                           ),
-                        ),
-
-                        const SizedBox(height: 6),
-
-                        // Frequency
-                        Text(
-                          frequency,
-                          style: TextStyle(
-                            fontFamily: 'Poppins',
-                            fontSize: 15,
-                            color: Colors.white
-                                .withOpacity(0.75),
-                          ),
-                        ),
-
-                        // Instructions
-                        if (instructions != null &&
-                            instructions.isNotEmpty) ...[
-                          const SizedBox(height: 12),
+                          const SizedBox(height: 18),
                           Padding(
-                            padding:
-                                const EdgeInsets.symmetric(
+                            padding: const EdgeInsets.symmetric(
                               horizontal: AppDimensions.xl,
                             ),
-                            child: Container(
-                              padding:
-                                  const EdgeInsets.symmetric(
-                                horizontal:
-                                    AppDimensions.md,
-                                vertical:
-                                    AppDimensions.sm,
-                              ),
-                              decoration: BoxDecoration(
-                                color: Colors.white
-                                    .withOpacity(0.12),
-                                borderRadius:
-                                    BorderRadius.circular(
-                                  AppDimensions.radiusMd,
-                                ),
-                              ),
-                              child: Text(
-                                instructions,
-                                textAlign: TextAlign.center,
-                                style: TextStyle(
-                                  fontFamily: 'Poppins',
-                                  fontSize: 14,
-                                  fontStyle: FontStyle.italic,
-                                  color: Colors.white
-                                      .withOpacity(0.85),
-                                  height: 1.5,
-                                ),
+                            child: Text(
+                              name,
+                              textAlign: TextAlign.center,
+                              style: const TextStyle(
+                                fontFamily: 'Poppins',
+                                fontSize: 24,
+                                fontWeight: FontWeight.w800,
+                                color: Colors.white,
+                                height: 1.2,
                               ),
                             ),
                           ),
+                          const SizedBox(height: 6),
+                          Text(
+                            '$dosage $unit',
+                            style: TextStyle(
+                              fontFamily: 'Poppins',
+                              fontSize: 18,
+                              fontWeight: FontWeight.w600,
+                              color: Colors.white.withOpacity(0.9),
+                            ),
+                          ),
+                          if (instructions != null &&
+                              instructions.isNotEmpty) ...[
+                            const SizedBox(height: 10),
+                            Padding(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: AppDimensions.lg,
+                              ),
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: AppDimensions.md,
+                                  vertical: 10,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: Colors.white.withOpacity(0.12),
+                                  borderRadius: BorderRadius.circular(
+                                    AppDimensions.radiusMd,
+                                  ),
+                                ),
+                                child: Text(
+                                  instructions,
+                                  textAlign: TextAlign.center,
+                                  style: TextStyle(
+                                    fontFamily: 'Poppins',
+                                    fontSize: 13,
+                                    fontStyle: FontStyle.italic,
+                                    color: Colors.white.withOpacity(0.85),
+                                    height: 1.35,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
+                          if (hasAudio) ...[
+                            const SizedBox(height: 12),
+                            Text(
+                              _isReminderLoopActive
+                                  ? 'Voice playing'
+                                  : 'Doctor note ready',
+                              style: TextStyle(
+                                fontFamily: 'Poppins',
+                                fontSize: 13,
+                                color: Colors.white.withOpacity(0.85),
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ],
                         ],
-                      ],
+                      ),
                     ),
                   ),
                 ),
-
-                // ── BOTTOM: Buttons area ─────────────
                 Container(
                   padding: const EdgeInsets.fromLTRB(
                     AppDimensions.lg,
@@ -438,8 +634,6 @@ class _DoseConfirmationScreenState
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-
-                      // Drag handle
                       Container(
                         width: 40,
                         height: 4,
@@ -447,139 +641,99 @@ class _DoseConfirmationScreenState
                           bottom: AppDimensions.lg,
                         ),
                         decoration: BoxDecoration(
-                          color:
-                              Colors.white.withOpacity(0.3),
-                          borderRadius:
-                              BorderRadius.circular(2),
+                          color: Colors.white.withOpacity(0.3),
+                          borderRadius: BorderRadius.circular(2),
                         ),
                       ),
-
-                      // ── BIG TAKE BUTTON ────────────
                       AnimatedBuilder(
                         animation: _pulseAnim,
-                        builder: (context, child) =>
-                            Transform.scale(
+                        builder: (context, child) => Transform.scale(
                           scale: _pulseAnim.value,
                           child: child,
                         ),
                         child: SizedBox(
                           width: double.infinity,
-                          height: 100,
+                          height: 88,
                           child: ElevatedButton(
-                            onPressed: _isLoading
-                                ? null
-                                : _confirmDoseTaken,
+                            onPressed: _isLoading ? null : _confirmDoseTaken,
                             style: ElevatedButton.styleFrom(
                               backgroundColor: Colors.white,
-                              foregroundColor:
-                                  AppColors.successGreen,
+                              foregroundColor: AppColors.successGreen,
                               disabledBackgroundColor:
-                                  Colors.white
-                                      .withOpacity(0.7),
+                                  Colors.white.withOpacity(0.7),
                               shape: RoundedRectangleBorder(
-                                borderRadius:
-                                    BorderRadius.circular(
+                                borderRadius: BorderRadius.circular(
                                   AppDimensions.radiusXl,
                                 ),
                               ),
                               elevation: 8,
-                              shadowColor: Colors.black
-                                  .withOpacity(0.3),
+                              shadowColor: Colors.black.withOpacity(0.3),
                             ),
                             child: _isLoading
                                 ? const SizedBox(
                                     width: 32,
                                     height: 32,
-                                    child:
-                                        CircularProgressIndicator(
-                                      color: AppColors
-                                          .successGreen,
+                                    child: CircularProgressIndicator(
+                                      color: AppColors.successGreen,
                                       strokeWidth: 3,
                                     ),
                                   )
-                                : const Column(
-                                    mainAxisAlignment:
-                                        MainAxisAlignment
-                                            .center,
-                                    children: [
-                                      Icon(
-                                        Icons
-                                            .check_circle_rounded,
-                                        size: 36,
-                                        color: AppColors
-                                            .successGreen,
-                                      ),
-                                      SizedBox(height: 4),
-                                      Text(
-                                        '✓  I TOOK MY MEDICINE',
-                                        style: TextStyle(
-                                          fontFamily:
-                                              'Poppins',
-                                          fontSize: 18,
-                                          fontWeight:
-                                              FontWeight.w800,
-                                          color: AppColors
-                                              .successGreen,
-                                          letterSpacing: 0.5,
-                                        ),
-                                      ),
-                                    ],
+                                : Text(
+                                    _takeButtonText,
+                                    style: const TextStyle(
+                                      fontFamily: 'Poppins',
+                                      fontSize: 22,
+                                      fontWeight: FontWeight.w800,
+                                      color: AppColors.successGreen,
+                                      letterSpacing: 0.5,
+                                    ),
                                   ),
                           ),
                         ),
                       ),
-
-                      const SizedBox(
-                          height: AppDimensions.md),
-
-                      // ── SNOOZE button ──────────────
+                      const SizedBox(height: AppDimensions.md),
                       SizedBox(
                         width: double.infinity,
-                        height: 56,
+                        height: 50,
                         child: TextButton.icon(
-                          onPressed: _snooze,
+                          onPressed: _handleLater,
                           icon: Icon(
-                            Icons.snooze,
-                            color: Colors.white
-                                .withOpacity(0.8),
-                            size: 20,
+                            _isSecondReminder
+                                ? Icons.close_rounded
+                                : Icons.schedule,
+                            color: Colors.white.withOpacity(0.8),
+                            size: 18,
                           ),
                           label: Text(
-                            'Remind me in 30 minutes',
+                            _laterButtonText,
                             style: TextStyle(
                               fontFamily: 'Poppins',
-                              fontSize: 15,
+                              fontSize: 14,
                               fontWeight: FontWeight.w500,
-                              color: Colors.white
-                                  .withOpacity(0.8),
+                              color: Colors.white.withOpacity(0.8),
                             ),
                           ),
                           style: TextButton.styleFrom(
                             shape: RoundedRectangleBorder(
-                              borderRadius:
-                                  BorderRadius.circular(
+                              borderRadius: BorderRadius.circular(
                                 AppDimensions.radiusMd,
                               ),
                               side: BorderSide(
-                                color: Colors.white
-                                    .withOpacity(0.3),
+                                color: Colors.white.withOpacity(0.3),
                               ),
                             ),
                           ),
                         ),
                       ),
-
-                      const SizedBox(
-                          height: AppDimensions.sm),
-
-                      // Patient name reminder
+                      const SizedBox(height: AppDimensions.sm),
                       Text(
-                        'For: ${widget.patientName}',
+                        widget.patientName,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                         style: TextStyle(
                           fontFamily: 'Poppins',
-                          fontSize: 13,
-                          color:
-                              Colors.white.withOpacity(0.5),
+                          fontSize: 12,
+                          color: Colors.white.withOpacity(0.5),
                         ),
                       ),
                     ],
@@ -588,8 +742,6 @@ class _DoseConfirmationScreenState
               ],
             ),
           ),
-
-          // ── SUCCESS OVERLAY ───────────────────────
           if (_showSuccess)
             AnimatedBuilder(
               animation: _successFadeAnim,
@@ -598,50 +750,30 @@ class _DoseConfirmationScreenState
                 child: child,
               ),
               child: Container(
-                color: AppColors.successGreen
-                    .withOpacity(0.95),
+                color: AppColors.successGreen.withOpacity(0.95),
                 child: Center(
                   child: AnimatedBuilder(
                     animation: _successScaleAnim,
-                    builder: (context, child) =>
-                        Transform.scale(
+                    builder: (context, child) => Transform.scale(
                       scale: _successScaleAnim.value,
                       child: child,
                     ),
-                    child: Column(
+                    child: const Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Container(
-                          width: 120,
-                          height: 120,
-                          decoration: const BoxDecoration(
-                            color: Colors.white,
-                            shape: BoxShape.circle,
-                          ),
-                          child: const Icon(
-                            Icons.check_rounded,
-                            size: 72,
-                            color: AppColors.successGreen,
-                          ),
+                        Icon(
+                          Icons.check_circle_rounded,
+                          size: 96,
+                          color: Colors.white,
                         ),
-                        const SizedBox(height: 24),
-                        const Text(
-                          'Well done! 🎉',
+                        SizedBox(height: 18),
+                        Text(
+                          'Taken',
                           style: TextStyle(
                             fontFamily: 'Poppins',
-                            fontSize: 28,
+                            fontSize: 30,
                             fontWeight: FontWeight.w800,
                             color: Colors.white,
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        const Text(
-                          'Dose recorded successfully',
-                          style: TextStyle(
-                            fontFamily: 'Poppins',
-                            fontSize: 16,
-                            color: Colors.white,
-                            fontWeight: FontWeight.w500,
                           ),
                         ),
                       ],
@@ -650,20 +782,52 @@ class _DoseConfirmationScreenState
                 ),
               ),
             ),
+          if (_showMissed)
+            Container(
+              color: AppColors.dangerRed.withOpacity(0.94),
+              child: const Center(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      Icons.sms_failed_outlined,
+                      size: 72,
+                      color: Colors.white,
+                    ),
+                    SizedBox(height: 20),
+                    Text(
+                      'Dose missed',
+                      style: TextStyle(
+                        fontFamily: 'Poppins',
+                        fontSize: 26,
+                        fontWeight: FontWeight.w800,
+                        color: Colors.white,
+                      ),
+                    ),
+                    SizedBox(height: 8),
+                    Text(
+                      'Alert sent',
+                      style: TextStyle(
+                        fontFamily: 'Poppins',
+                        fontSize: 16,
+                        color: Colors.white,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
         ],
       ),
     );
   }
 
-  // ══════════════════════════════════════════════════════
-  //  LARGE PILL VISUAL — 120x120, same logic as home screen
-  // ══════════════════════════════════════════════════════
   Widget _buildLargePillVisual({
     required String? photoPath,
     required String shape,
     required Color color,
   }) {
-    // If photo exists — show it large
     if (photoPath != null && photoPath.isNotEmpty) {
       final file = File(photoPath);
       if (file.existsSync()) {
@@ -671,8 +835,7 @@ class _DoseConfirmationScreenState
           width: 130,
           height: 130,
           decoration: BoxDecoration(
-            borderRadius:
-                BorderRadius.circular(AppDimensions.radiusXl),
+            borderRadius: BorderRadius.circular(AppDimensions.radiusXl),
             boxShadow: [
               BoxShadow(
                 color: Colors.black.withOpacity(0.25),
@@ -689,14 +852,12 @@ class _DoseConfirmationScreenState
       }
     }
 
-    // No photo — draw the shape large
     return Container(
       width: 130,
       height: 130,
       decoration: BoxDecoration(
         color: Colors.white.withOpacity(0.15),
-        borderRadius:
-            BorderRadius.circular(AppDimensions.radiusXl),
+        borderRadius: BorderRadius.circular(AppDimensions.radiusXl),
         border: Border.all(
           color: Colors.white.withOpacity(0.4),
           width: 2.5,
@@ -743,14 +904,16 @@ class _DoseConfirmationScreenState
           mainAxisSize: MainAxisSize.min,
           children: [
             Container(
-              width: 24, height: 14,
+              width: 24,
+              height: 14,
               decoration: BoxDecoration(
                 color: color,
                 borderRadius: BorderRadius.circular(4),
               ),
             ),
             Container(
-              width: 54, height: 60,
+              width: 54,
+              height: 60,
               decoration: BoxDecoration(
                 color: color.withOpacity(0.85),
                 borderRadius: BorderRadius.circular(12),
@@ -776,7 +939,8 @@ class _DoseConfirmationScreenState
 
       case 'patch':
         return Container(
-          width: 76, height: 76,
+          width: 76,
+          height: 76,
           decoration: BoxDecoration(
             color: color.withOpacity(0.25),
             borderRadius: BorderRadius.circular(12),
@@ -784,7 +948,8 @@ class _DoseConfirmationScreenState
           ),
           child: Center(
             child: Container(
-              width: 40, height: 40,
+              width: 40,
+              height: 40,
               decoration: BoxDecoration(
                 color: color.withOpacity(0.55),
                 borderRadius: BorderRadius.circular(6),
@@ -796,7 +961,8 @@ class _DoseConfirmationScreenState
       case 'tablet':
       default:
         return Container(
-          width: 76, height: 76,
+          width: 76,
+          height: 76,
           decoration: BoxDecoration(
             color: color,
             shape: BoxShape.circle,
@@ -810,7 +976,8 @@ class _DoseConfirmationScreenState
           ),
           child: Center(
             child: Container(
-              width: 52, height: 4,
+              width: 52,
+              height: 4,
               decoration: BoxDecoration(
                 color: Colors.white.withOpacity(0.65),
                 borderRadius: BorderRadius.circular(2),
@@ -822,7 +989,6 @@ class _DoseConfirmationScreenState
   }
 }
 
-// ── Large Drop Painter ────────────────────────────────────
 class _LargeDropPainter extends CustomPainter {
   _LargeDropPainter({required this.color});
   final Color color;
@@ -836,12 +1002,16 @@ class _LargeDropPainter extends CustomPainter {
     final path = Path();
     path.moveTo(size.width / 2, 0);
     path.quadraticBezierTo(
-      size.width, size.height * 0.5,
-      size.width / 2, size.height,
+      size.width,
+      size.height * 0.5,
+      size.width / 2,
+      size.height,
     );
     path.quadraticBezierTo(
-      0, size.height * 0.5,
-      size.width / 2, 0,
+      0,
+      size.height * 0.5,
+      size.width / 2,
+      0,
     );
     canvas.drawPath(path, paint);
 
@@ -855,6 +1025,5 @@ class _LargeDropPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(_LargeDropPainter old) =>
-      old.color != color;
+  bool shouldRepaint(_LargeDropPainter old) => old.color != color;
 }

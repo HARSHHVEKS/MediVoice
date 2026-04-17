@@ -8,7 +8,11 @@ import '../../../core/database/db_constants.dart';
 
 class DoseHistoryScreen extends StatefulWidget {
   const DoseHistoryScreen({
-    required this.patientId, required this.patientName, required this.medicationName, required this.medicationId, super.key,
+    required this.patientId,
+    required this.patientName,
+    required this.medicationName,
+    required this.medicationId,
+    super.key,
   });
 
   final int patientId;
@@ -17,23 +21,21 @@ class DoseHistoryScreen extends StatefulWidget {
   final int medicationId;
 
   @override
-  State<DoseHistoryScreen> createState() =>
-      _DoseHistoryScreenState();
+  State<DoseHistoryScreen> createState() => _DoseHistoryScreenState();
 }
 
-class _DoseHistoryScreenState
-    extends State<DoseHistoryScreen> {
+class _DoseHistoryScreenState extends State<DoseHistoryScreen> {
   // ── State ─────────────────────────────────────────────
-  List<Map<String, dynamic>> _allLogs   = [];
-  List<Map<String, dynamic>> _filtered  = [];
+  List<Map<String, dynamic>> _allLogs = [];
+  List<Map<String, dynamic>> _filtered = [];
   bool _isLoading = true;
   String _selectedFilter = 'all'; // all, taken, missed, skipped
 
   // ── Stats ─────────────────────────────────────────────
-  int _takenCount   = 0;
-  int _missedCount  = 0;
+  int _takenCount = 0;
+  int _missedCount = 0;
   int _skippedCount = 0;
-  int _totalCount   = 0;
+  int _totalCount = 0;
 
   final _db = DatabaseHelper.instance;
 
@@ -57,33 +59,25 @@ class _DoseHistoryScreenState
       // Filter to only this medication
       final medLogs = logs
           .where(
-            (log) =>
-                log[DBConstants.logMedId] ==
-                widget.medicationId,
+            (log) => log[DBConstants.logMedId] == widget.medicationId,
           )
           .toList();
 
       // Calculate stats
       _takenCount = medLogs
-          .where((l) =>
-              l[DBConstants.logStatus] ==
-              DBConstants.statusTaken)
+          .where((l) => l[DBConstants.logStatus] == DBConstants.statusTaken)
           .length;
       _missedCount = medLogs
-          .where((l) =>
-              l[DBConstants.logStatus] ==
-              DBConstants.statusMissed)
+          .where((l) => l[DBConstants.logStatus] == DBConstants.statusMissed)
           .length;
       _skippedCount = medLogs
-          .where((l) =>
-              l[DBConstants.logStatus] ==
-              DBConstants.statusSkipped)
+          .where((l) => l[DBConstants.logStatus] == DBConstants.statusSkipped)
           .length;
       _totalCount = medLogs.length;
 
       if (!mounted) return;
       setState(() {
-        _allLogs  = medLogs;
+        _allLogs = medLogs;
         _isLoading = false;
       });
 
@@ -106,10 +100,8 @@ class _DoseHistoryScreenState
       if (filter == 'all') {
         _filtered = List.from(_allLogs);
       } else {
-        _filtered = _allLogs
-            .where((l) =>
-                l[DBConstants.logStatus] == filter)
-            .toList();
+        _filtered =
+            _allLogs.where((l) => l[DBConstants.logStatus] == filter).toList();
       }
     });
   }
@@ -120,10 +112,20 @@ class _DoseHistoryScreenState
     try {
       final dt = DateTime.parse(isoString);
       const months = [
-        'Jan','Feb','Mar','Apr','May','Jun',
-        'Jul','Aug','Sep','Oct','Nov','Dec',
+        'Jan',
+        'Feb',
+        'Mar',
+        'Apr',
+        'May',
+        'Jun',
+        'Jul',
+        'Aug',
+        'Sep',
+        'Oct',
+        'Nov',
+        'Dec',
       ];
-      final h   = dt.hour.toString().padLeft(2, '0');
+      final h = dt.hour.toString().padLeft(2, '0');
       final min = dt.minute.toString().padLeft(2, '0');
       return '${dt.day} ${months[dt.month - 1]} ${dt.year}  $h:$min';
     } catch (_) {
@@ -134,7 +136,14 @@ class _DoseHistoryScreenState
   // ── Format scheduled time ─────────────────────────────
   String _formatScheduled(String? time) {
     if (time == null || time.isEmpty) return '—';
-    return time; // already "HH:mm"
+    try {
+      final dt = DateTime.parse(time);
+      final h = dt.hour.toString().padLeft(2, '0');
+      final min = dt.minute.toString().padLeft(2, '0');
+      return '$h:$min';
+    } catch (_) {
+      return time;
+    }
   }
 
   // ── Status config ─────────────────────────────────────
@@ -144,93 +153,91 @@ class _DoseHistoryScreenState
         return {
           'label': 'Taken',
           'color': AppColors.successGreen,
-          'bg':    AppColors.successGreen.withOpacity(0.1),
-          'icon':  Icons.check_circle_rounded,
+          'bg': AppColors.successGreen.withOpacity(0.1),
+          'icon': Icons.check_circle_rounded,
         };
       case DBConstants.statusMissed:
         return {
           'label': 'Missed',
           'color': AppColors.dangerRed,
-          'bg':    AppColors.dangerRed.withOpacity(0.1),
-          'icon':  Icons.cancel_rounded,
+          'bg': AppColors.dangerRed.withOpacity(0.1),
+          'icon': Icons.cancel_rounded,
         };
       case DBConstants.statusSkipped:
         return {
           'label': 'Skipped',
           'color': AppColors.textSecondary,
-          'bg':    Colors.grey.shade100,
-          'icon':  Icons.skip_next_rounded,
+          'bg': Colors.grey.shade100,
+          'icon': Icons.skip_next_rounded,
         };
       case DBConstants.statusPending:
       default:
         return {
           'label': 'Pending',
           'color': AppColors.warningOrange,
-          'bg':    AppColors.warningOrange.withOpacity(0.1),
-          'icon':  Icons.hourglass_empty_rounded,
+          'bg': AppColors.warningOrange.withOpacity(0.1),
+          'icon': Icons.hourglass_empty_rounded,
         };
     }
   }
-    @override
+
+  @override
   Widget build(BuildContext context) => Scaffold(
-      body: Container(
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [
-              AppColors.primaryBlue,
-              AppColors.primaryDark,
-            ],
+        body: Container(
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [
+                AppColors.primaryBlue,
+                AppColors.primaryDark,
+              ],
+            ),
           ),
-        ),
-        child: SafeArea(
-          child: Column(
-            children: [
+          child: SafeArea(
+            child: Column(
+              children: [
+                // ── Top Bar ────────────────────────────
+                _buildTopBar(),
 
-              // ── Top Bar ────────────────────────────
-              _buildTopBar(),
+                // ── Stats Row ─────────────────────────
+                _buildStatsRow(),
 
-              // ── Stats Row ─────────────────────────
-              _buildStatsRow(),
-
-              // ── Content ────────────────────────────
-              Expanded(
-                child: Container(
-                  decoration: const BoxDecoration(
-                    color: AppColors.backgroundLight,
-                    borderRadius: BorderRadius.only(
-                      topLeft:  Radius.circular(28),
-                      topRight: Radius.circular(28),
+                // ── Content ────────────────────────────
+                Expanded(
+                  child: Container(
+                    decoration: const BoxDecoration(
+                      color: AppColors.backgroundLight,
+                      borderRadius: BorderRadius.only(
+                        topLeft: Radius.circular(28),
+                        topRight: Radius.circular(28),
+                      ),
+                    ),
+                    child: Column(
+                      children: [
+                        // Filter tabs
+                        _buildFilterTabs(),
+                        // List
+                        Expanded(
+                          child: _isLoading
+                              ? const Center(
+                                  child: CircularProgressIndicator(
+                                    color: AppColors.primaryBlue,
+                                  ),
+                                )
+                              : _filtered.isEmpty
+                                  ? _buildEmptyState()
+                                  : _buildLogList(),
+                        ),
+                      ],
                     ),
                   ),
-                  child: Column(
-                    children: [
-                      // Filter tabs
-                      _buildFilterTabs(),
-                      // List
-                      Expanded(
-                        child: _isLoading
-                            ? const Center(
-                                child:
-                                    CircularProgressIndicator(
-                                  color:
-                                      AppColors.primaryBlue,
-                                ),
-                              )
-                            : _filtered.isEmpty
-                                ? _buildEmptyState()
-                                : _buildLogList(),
-                      ),
-                    ],
-                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
-      ),
-    );
+      );
 
   // ── Top Bar ───────────────────────────────────────────
   Widget _buildTopBar() => Padding(
@@ -251,8 +258,7 @@ class _DoseHistoryScreenState
             ),
             Expanded(
               child: Column(
-                crossAxisAlignment:
-                    CrossAxisAlignment.start,
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
                     widget.medicationName,
@@ -380,9 +386,9 @@ class _DoseHistoryScreenState
           scrollDirection: Axis.horizontal,
           child: Row(
             children: [
-              _filterTab('all',     'All'),
-              _filterTab(DBConstants.statusTaken,   'Taken'),
-              _filterTab(DBConstants.statusMissed,  'Missed'),
+              _filterTab('all', 'All'),
+              _filterTab(DBConstants.statusTaken, 'Taken'),
+              _filterTab(DBConstants.statusMissed, 'Missed'),
               _filterTab(DBConstants.statusSkipped, 'Skipped'),
               _filterTab(DBConstants.statusPending, 'Pending'),
             ],
@@ -396,27 +402,21 @@ class _DoseHistoryScreenState
       onTap: () => _applyFilter(value),
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
-        margin: const EdgeInsets.only(
-            right: AppDimensions.sm),
+        margin: const EdgeInsets.only(right: AppDimensions.sm),
         padding: const EdgeInsets.symmetric(
           horizontal: AppDimensions.md,
           vertical: 8,
         ),
         decoration: BoxDecoration(
-          color: isSelected
-              ? AppColors.primaryBlue
-              : Colors.white,
+          color: isSelected ? AppColors.primaryBlue : Colors.white,
           borderRadius: BorderRadius.circular(20),
           border: Border.all(
-            color: isSelected
-                ? AppColors.primaryBlue
-                : Colors.grey.shade300,
+            color: isSelected ? AppColors.primaryBlue : Colors.grey.shade300,
           ),
           boxShadow: isSelected
               ? [
                   BoxShadow(
-                    color: AppColors.primaryBlue
-                        .withOpacity(0.3),
+                    color: AppColors.primaryBlue.withOpacity(0.3),
                     blurRadius: 6,
                     offset: const Offset(0, 2),
                   ),
@@ -429,9 +429,7 @@ class _DoseHistoryScreenState
             fontFamily: 'Poppins',
             fontSize: 13,
             fontWeight: FontWeight.w600,
-            color: isSelected
-                ? Colors.white
-                : AppColors.textSecondary,
+            color: isSelected ? Colors.white : AppColors.textSecondary,
           ),
         ),
       ),
@@ -484,36 +482,28 @@ class _DoseHistoryScreenState
           AppDimensions.xl,
         ),
         itemCount: _filtered.length,
-        itemBuilder: (context, index) =>
-            _buildLogCard(_filtered[index]),
+        itemBuilder: (context, index) => _buildLogCard(_filtered[index]),
       );
 
   // ── Log Card ──────────────────────────────────────────
   Widget _buildLogCard(Map<String, dynamic> log) {
-    final status =
-        log[DBConstants.logStatus] as String?;
-    final scheduledTime =
-        log[DBConstants.logScheduledTime] as String?;
-    final confirmedTime =
-        log[DBConstants.logConfirmedTime] as String?;
-    final method =
-        log[DBConstants.logMethod] as String?;
-    final createdAt =
-        log[DBConstants.logCreatedAt] as String?;
+    final status = log[DBConstants.logStatus] as String?;
+    final scheduledTime = log[DBConstants.logScheduledTime] as String?;
+    final confirmedTime = log[DBConstants.logConfirmedTime] as String?;
+    final method = log[DBConstants.logMethod] as String?;
+    final createdAt = log[DBConstants.logCreatedAt] as String?;
 
-    final config  = _statusConfig(status);
-    final color   = config['color'] as Color;
-    final bgColor = config['bg']    as Color;
-    final icon    = config['icon']  as IconData;
-    final label   = config['label'] as String;
+    final config = _statusConfig(status);
+    final color = config['color'] as Color;
+    final bgColor = config['bg'] as Color;
+    final icon = config['icon'] as IconData;
+    final label = config['label'] as String;
 
     return Container(
-      margin: const EdgeInsets.only(
-          bottom: AppDimensions.sm),
+      margin: const EdgeInsets.only(bottom: AppDimensions.sm),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius:
-            BorderRadius.circular(AppDimensions.radiusMd),
+        borderRadius: BorderRadius.circular(AppDimensions.radiusMd),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withOpacity(0.04),
@@ -530,7 +520,6 @@ class _DoseHistoryScreenState
         padding: const EdgeInsets.all(AppDimensions.md),
         child: Row(
           children: [
-
             // Status icon circle
             Container(
               width: 44,
@@ -547,8 +536,7 @@ class _DoseHistoryScreenState
             // Details
             Expanded(
               child: Column(
-                crossAxisAlignment:
-                    CrossAxisAlignment.start,
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   // Status badge
                   Container(
@@ -558,8 +546,7 @@ class _DoseHistoryScreenState
                     ),
                     decoration: BoxDecoration(
                       color: bgColor,
-                      borderRadius:
-                          BorderRadius.circular(20),
+                      borderRadius: BorderRadius.circular(20),
                     ),
                     child: Text(
                       label,
@@ -595,8 +582,7 @@ class _DoseHistoryScreenState
                   ),
 
                   // Confirmed time (if taken)
-                  if (confirmedTime != null &&
-                      confirmedTime.isNotEmpty) ...[
+                  if (confirmedTime != null && confirmedTime.isNotEmpty) ...[
                     const SizedBox(height: 2),
                     Row(
                       children: [
@@ -619,8 +605,7 @@ class _DoseHistoryScreenState
                   ],
 
                   // Method
-                  if (method != null &&
-                      method.isNotEmpty) ...[
+                  if (method != null && method.isNotEmpty) ...[
                     const SizedBox(height: 2),
                     Text(
                       'Via: $method',
@@ -638,9 +623,7 @@ class _DoseHistoryScreenState
 
             // Date on right
             Text(
-              _formatDate(createdAt)
-                  .split('  ')
-                  .first, // just the date part
+              _formatDate(createdAt).split('  ').first, // just the date part
               style: TextStyle(
                 fontFamily: 'Poppins',
                 fontSize: 11,
