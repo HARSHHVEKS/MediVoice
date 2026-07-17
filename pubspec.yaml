@@ -23,6 +23,7 @@ dependencies:
   image_picker: ^1.2.1
   flutter_local_notifications: ^17.2.2
   timezone: ^0.9.4
+  flutter_tts: ^4.0.2
   # soundpool: ^2.3.0 requires sdk 31
   # flutter_ringtone_player: ^4.0.0 uses jni
   # audioplayers: ^6.0.0
