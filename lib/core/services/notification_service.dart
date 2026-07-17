@@ -328,7 +328,10 @@ class NotificationService {
   ) {
     final minutesOfDay =
         (originalScheduledTime.hour * 60) + originalScheduledTime.minute;
-    return 500000 + (medicationId * 1000) + minutesOfDay;
+    // Stride must be >= 1440 (minutes/day) so each medication gets a
+    // non-overlapping block of IDs — otherwise two meds could collide on the
+    // same notification ID and cancel each other's follow-up reminder.
+    return 500000 + (medicationId * 1440) + minutesOfDay;
   }
 
   Future<void> cancelAll() async {
