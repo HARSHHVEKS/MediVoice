@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'core/database/database_helper.dart';
 import 'core/navigation/app_navigator.dart';
 import 'core/services/notification_service.dart'; // ← NEW
+import 'core/services/tts_service.dart'; // ← NEW
 import 'core/theme/app_theme.dart';
 import 'features/auth/screens/admin_login_screen.dart';
 import 'features/auth/screens/role_selection_screen.dart';
@@ -29,6 +30,9 @@ void main() async {
 
   // Initialize notifications ← NEW
   await NotificationService.instance.initialize();
+
+  // Initialize text-to-speech (spoken reminders) ← NEW
+  await TtsService.instance.initialize();
 
   runApp(const MediVoiceApp());
 
