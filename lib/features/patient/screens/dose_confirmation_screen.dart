@@ -12,6 +12,7 @@ import '../../../core/database/db_constants.dart';
 import '../../../core/services/alarm_audio_service.dart';
 import '../../../core/services/notification_service.dart';
 import '../../../core/services/sms_service.dart';
+import '../../../core/services/tts_service.dart';
 
 class DoseConfirmationScreen extends StatefulWidget {
   const DoseConfirmationScreen({
@@ -119,6 +120,7 @@ class _DoseConfirmationScreenState extends State<DoseConfirmationScreen>
     AlarmAudioService.instance.stopAlarm();
     AlarmAudioService.instance.stopPlayback();
     AlarmAudioService.instance.stopVibration();
+    TtsService.instance.stop();
     _floatController.dispose();
     _pulseController.dispose();
     _successController.dispose();
@@ -194,6 +196,14 @@ class _DoseConfirmationScreenState extends State<DoseConfirmationScreen>
         await AlarmAudioService.instance.stopAlarm();
         if (!alarmStep) break;
 
+        // Speak the reminder aloud in English (always), before the
+        // caregiver's optional recorded note. Interruptible: if the patient
+        // acts, `stop()` fires from the stop paths and this returns early.
+        if (_isReminderLoopActive && mounted) {
+          await TtsService.instance.speak(_reminderSpeech);
+          if (!_isReminderLoopActive) break;
+        }
+
         if (audioPath != null && audioPath.isNotEmpty) {
           final durationMs =
               await AlarmAudioService.instance.playRecording(audioPath);
@@ -221,6 +231,7 @@ class _DoseConfirmationScreenState extends State<DoseConfirmationScreen>
       await AlarmAudioService.instance.stopAlarm();
       await AlarmAudioService.instance.stopPlayback();
       await AlarmAudioService.instance.stopVibration();
+      await TtsService.instance.stop();
       if (!mounted) return;
       setState(() => _isReminderLoopActive = false);
     }
@@ -233,6 +244,53 @@ class _DoseConfirmationScreenState extends State<DoseConfirmationScreen>
       await _markDoseMissedAndSendSms();
     } else {
       await _scheduleSecondReminderAndExit();
+    }
+  }
+
+  /// The English line spoken by TTS, e.g.
+  /// "Hello Sarah. It is time to take your Paracetamol. 500 milligrams."
+  String get _reminderSpeech {
+    final med = widget.medication;
+    final name = (med[DBConstants.medName] as String?)?.trim();
+    final dosage = (med[DBConstants.medDosage]?.toString() ?? '').trim();
+    final unit = _spokenUnit((med[DBConstants.medDosageUnit] as String?)?.trim());
+    final patient = widget.patientName.trim();
+
+    final buffer = StringBuffer();
+    if (patient.isNotEmpty && patient.toLowerCase() != 'patient') {
+      buffer.write('Hello $patient. ');
+    }
+    buffer.write('It is time to take your ');
+    buffer.write((name == null || name.isEmpty) ? 'medicine' : name);
+    buffer.write('.');
+    if (dosage.isNotEmpty) {
+      buffer.write(' $dosage');
+      if (unit.isNotEmpty) buffer.write(' $unit');
+      buffer.write('.');
+    }
+    return buffer.toString();
+  }
+
+  /// Expand dosage units so TTS speaks words, not letters ("mg" → "milligrams").
+  String _spokenUnit(String? unit) {
+    if (unit == null || unit.isEmpty) return '';
+    switch (unit.toLowerCase()) {
+      case 'mg':
+        return 'milligrams';
+      case 'mcg':
+      case 'µg':
+        return 'micrograms';
+      case 'g':
+        return 'grams';
+      case 'ml':
+        return 'millilitres';
+      case 'l':
+        return 'litres';
+      case 'iu':
+        return 'units';
+      default:
+        // tablet(s), pill(s), drop(s), puff(s), etc. read fine as-is.
+        return unit;
     }
   }
 
@@ -254,6 +312,7 @@ class _DoseConfirmationScreenState extends State<DoseConfirmationScreen>
     await AlarmAudioService.instance.stopAlarm();
     await AlarmAudioService.instance.stopPlayback();
     await AlarmAudioService.instance.stopVibration();
+    await TtsService.instance.stop();
   }
 
   Future<void> _scheduleSecondReminderAndExit() async {
