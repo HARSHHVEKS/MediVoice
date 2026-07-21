@@ -8,25 +8,30 @@ import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_dimensions.dart';
 import '../../../core/database/database_helper.dart';
 import '../../../core/database/db_constants.dart';
-import '../../caregiver/screens/dose_history_screen.dart'; // ← NEW
+import '../../../core/services/adherence_service.dart';
+import '../../../core/theme/theme_controller.dart';
+import '../../../core/widgets/adherence_ring.dart';
+import '../../../core/widgets/pill_visual.dart';
+import '../../../core/widgets/section_header.dart';
 import 'dose_confirmation_screen.dart';
 import 'patient_add_medication_screen.dart';
+import 'patient_history_screen.dart';
 
 class PatientHomeScreen extends StatefulWidget {
   const PatientHomeScreen({super.key});
 
   @override
-  State<PatientHomeScreen> createState() =>
-      _PatientHomeScreenState();
+  State<PatientHomeScreen> createState() => _PatientHomeScreenState();
 }
 
-class _PatientHomeScreenState
-    extends State<PatientHomeScreen> {
-  Map<String, dynamic>? _patient;
-  List<Map<String, dynamic>> _medications = [];
-  bool _isLoading = true;
-
+class _PatientHomeScreenState extends State<PatientHomeScreen> {
   final _db = DatabaseHelper.instance;
+
+  Map<String, dynamic>? _patient;
+  List<DoseSlot> _slots = [];
+  int _medicineCount = 0;
+  int _streak = 0;
+  bool _isLoading = true;
 
   @override
   void initState() {
@@ -40,66 +45,97 @@ class _PatientHomeScreenState
 
       final patientId = await _db.getCurrentPatientId();
       if (patientId == null) {
-        if (!mounted) return;
-        Navigator.pushReplacementNamed(
-            context, '/role-selection');
+        _bounceToRoleSelection();
         return;
       }
 
       final patient = await _db.getPatientById(patientId);
       if (patient == null) {
-        if (!mounted) return;
-        Navigator.pushReplacementNamed(
-            context, '/role-selection');
+        _bounceToRoleSelection();
         return;
       }
 
-      final meds =
-          await _db.getMedicationsByPatient(patientId);
+      final now = DateTime.now();
+      final slots =
+          await AdherenceService.instance.todaysDoses(patientId, now: now);
+      final meds = await _db.getMedicationsByPatient(patientId);
+      final streak =
+          await AdherenceService.instance.currentStreak(patientId, now: now);
 
       if (!mounted) return;
       setState(() {
-        _patient   = patient;
-        _medications = meds;
+        _patient = patient;
+        _slots = slots;
+        _medicineCount = meds.length;
+        _streak = streak;
         _isLoading = false;
       });
-
-      debugPrint(
-        '✅ PATIENT HOME: Loaded ${meds.length} medications',
-      );
     } catch (e) {
       debugPrint('❌ PATIENT HOME ERROR: $e');
-      setState(() => _isLoading = false);
+      if (mounted) setState(() => _isLoading = false);
     }
   }
-    @override
+
+  void _bounceToRoleSelection() {
+    if (!mounted) return;
+    Navigator.pushReplacementNamed(context, '/role-selection');
+  }
+
+  Future<void> _cycleTheme() async {
+    final mode = await ThemeController.instance.toggle();
+    if (!mounted) return;
+    final label = switch (mode) {
+      ThemeMode.light => 'Light mode',
+      ThemeMode.dark => 'Dark mode',
+      ThemeMode.system => 'System theme',
+    };
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(label, style: const TextStyle(fontFamily: 'Poppins')),
+        behavior: SnackBarBehavior.floating,
+        duration: const Duration(seconds: 1),
+      ),
+    );
+  }
+
+  // ── Derived groupings ────────────────────────────────────
+
+  double get _todayProgress {
+    if (_slots.isEmpty) return 1;
+    final taken =
+        _slots.where((s) => s.status == DBConstants.statusTaken).length;
+    return taken / _slots.length;
+  }
+
+  List<DoseSlot> _bucket(DoseBucket bucket, DateTime now) =>
+      _slots.where((s) => s.bucket(now) == bucket).toList();
+
+  @override
   Widget build(BuildContext context) {
     if (_isLoading) {
       return const Scaffold(
-        backgroundColor: AppColors.backgroundLight,
         body: Center(
-          child: CircularProgressIndicator(
-            color: AppColors.successGreen,
-          ),
+          child: CircularProgressIndicator(color: AppColors.successGreen),
         ),
       );
     }
 
-    final name =
-        _patient?[DBConstants.patientFullName] ?? 'Patient';
-    final initial = name.isNotEmpty
-        ? name.substring(0, 1).toUpperCase()
-        : '?';
+    final name = _patient?[DBConstants.patientFullName] as String? ?? 'Patient';
+    final initial = name.isNotEmpty ? name.substring(0, 1).toUpperCase() : '?';
+    final now = DateTime.now();
+
+    final dueNow = _bucket(DoseBucket.dueNow, now);
+    final upcoming = _bucket(DoseBucket.upcoming, now);
+    final taken = _bucket(DoseBucket.taken, now);
+    final missed = _bucket(DoseBucket.missed, now);
 
     return Scaffold(
-      backgroundColor: AppColors.backgroundLight,
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () => Navigator.push(
           context,
           MaterialPageRoute(
             builder: (_) => PatientAddMedicationScreen(
-              patientId:
-                  _patient![DBConstants.patientId] as int,
+              patientId: _patient![DBConstants.patientId] as int,
             ),
           ),
         ).then((_) => _loadPatientData()),
@@ -115,210 +151,230 @@ class _PatientHomeScreenState
           ),
         ),
       ),
-      body: SafeArea(
-        child: Column(
-          children: [
-            _buildHeader(name, initial),
-            Expanded(
-              child: _medications.isEmpty
-                  ? _buildNoMedicines()
-                  : _buildMedicineList(),
-            ),
+      body: RefreshIndicator(
+        onRefresh: _loadPatientData,
+        child: CustomScrollView(
+          slivers: [
+            SliverToBoxAdapter(child: _buildHeader(name, initial)),
+            if (_medicineCount == 0)
+              SliverFillRemaining(
+                hasScrollBody: false,
+                child: _buildNoMedicines(),
+              )
+            else if (_slots.isEmpty)
+              SliverFillRemaining(
+                hasScrollBody: false,
+                child: _buildNothingToday(),
+              )
+            else ...[
+              if (dueNow.isNotEmpty)
+                _buildSection(
+                  'Due now',
+                  Icons.notifications_active,
+                  AppColors.warningOrange,
+                  dueNow,
+                  now,
+                ),
+              if (upcoming.isNotEmpty)
+                _buildSection(
+                  'Upcoming today',
+                  Icons.schedule,
+                  AppColors.primaryBlue,
+                  upcoming,
+                  now,
+                ),
+              if (taken.isNotEmpty)
+                _buildSection(
+                  'Taken today',
+                  Icons.check_circle,
+                  AppColors.successGreen,
+                  taken,
+                  now,
+                ),
+              if (missed.isNotEmpty)
+                _buildSection(
+                  'Missed / skipped',
+                  Icons.error_outline,
+                  AppColors.dangerRed,
+                  missed,
+                  now,
+                ),
+              const SliverToBoxAdapter(child: SizedBox(height: 100)),
+            ],
           ],
         ),
       ),
     );
   }
 
+  // ── Header ───────────────────────────────────────────────
+
   Widget _buildHeader(String name, String initial) {
     final hour = DateTime.now().hour;
-    String greeting;
-    if (hour < 12) {
-      greeting = 'Good Morning';
-    } else if (hour < 17) {
-      greeting = 'Good Afternoon';
-    } else {
-      greeting = 'Good Evening';
-    }
+    final greeting = hour < 12
+        ? 'Good Morning'
+        : hour < 17
+            ? 'Good Afternoon'
+            : 'Good Evening';
 
     return Container(
       padding: const EdgeInsets.all(AppDimensions.lg),
       decoration: const BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            Color(0xFF43A047),
-            Color(0xFF2E7D32),
-          ],
-        ),
+        gradient: AppColors.patientGreenGradient,
         borderRadius: BorderRadius.only(
           bottomLeft: Radius.circular(28),
           bottomRight: Radius.circular(28),
         ),
       ),
-      child: Column(
-        children: [
-          Row(
-            children: [
-              // Avatar
-              Container(
-                width: 60,
-                height: 60,
-                decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.2),
-                  borderRadius: BorderRadius.circular(30),
-                  border: Border.all(
-                    color: Colors.white.withOpacity(0.4),
-                    width: 2,
-                  ),
-                  image: _patient?[DBConstants.patientPhoto]
-                              != null
-                      ? DecorationImage(
-                          image: FileImage(
-                            File(
-                              _patient![DBConstants.patientPhoto]
-                                  as String,
-                            ),
-                          ),
-                          fit: BoxFit.cover,
-                        )
-                      : null,
-                ),
-                child: _patient?[DBConstants.patientPhoto]
-                            == null
-                    ? Center(
-                        child: Text(
-                          initial,
-                          style: const TextStyle(
-                            fontFamily: 'Poppins',
-                            fontSize: 24,
-                            fontWeight: FontWeight.w700,
-                            color: Colors.white,
-                          ),
+      child: SafeArea(
+        bottom: false,
+        child: Column(
+          children: [
+            Row(
+              children: [
+                _buildAvatar(initial),
+                const SizedBox(width: AppDimensions.md),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        greeting,
+                        style: TextStyle(
+                          fontFamily: 'Poppins',
+                          fontSize: 14,
+                          color: Colors.white.withOpacity(0.85),
                         ),
-                      )
-                    : null,
+                      ),
+                      Text(
+                        name,
+                        style: const TextStyle(
+                          fontFamily: 'Poppins',
+                          fontSize: 20,
+                          fontWeight: FontWeight.w700,
+                          color: Colors.white,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
+                  ),
+                ),
+                _headerIcon(
+                  Icons.brightness_6_outlined,
+                  'Change theme',
+                  _cycleTheme,
+                ),
+                _headerIcon(
+                  Icons.history,
+                  'My dose history',
+                  _openHistory,
+                ),
+                _headerIcon(
+                  Icons.logout,
+                  'Log out',
+                  () => Navigator.pushReplacementNamed(
+                      context, '/role-selection'),
+                ),
+              ],
+            ),
+            const SizedBox(height: AppDimensions.lg),
+            _buildProgressPanel(),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildAvatar(String initial) {
+    final photo = _patient?[DBConstants.patientPhoto] as String?;
+    return Container(
+      width: 56,
+      height: 56,
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.2),
+        borderRadius: BorderRadius.circular(28),
+        border: Border.all(color: Colors.white.withOpacity(0.4), width: 2),
+        image: photo != null && photo.isNotEmpty
+            ? DecorationImage(image: FileImage(File(photo)), fit: BoxFit.cover)
+            : null,
+      ),
+      child: photo == null || photo.isEmpty
+          ? Center(
+              child: Text(
+                initial,
+                style: const TextStyle(
+                  fontFamily: 'Poppins',
+                  fontSize: 22,
+                  fontWeight: FontWeight.w700,
+                  color: Colors.white,
+                ),
               ),
+            )
+          : null,
+    );
+  }
 
-              const SizedBox(width: AppDimensions.md),
+  Widget _headerIcon(IconData icon, String tooltip, VoidCallback onTap) =>
+      IconButton(
+        icon: Icon(icon, color: Colors.white.withOpacity(0.9)),
+        tooltip: tooltip,
+        onPressed: onTap,
+      );
 
-              // Greeting
-              Expanded(
-                child: Column(
-                  crossAxisAlignment:
-                      CrossAxisAlignment.start,
+  Widget _buildProgressPanel() {
+    final takenCount =
+        _slots.where((s) => s.status == DBConstants.statusTaken).length;
+    return Container(
+      padding: const EdgeInsets.all(AppDimensions.md),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.15),
+        borderRadius: BorderRadius.circular(AppDimensions.radiusLg),
+      ),
+      child: Row(
+        children: [
+          AdherenceRing(
+            value: _todayProgress,
+            size: 76,
+            caption: 'today',
+            trackColor: Colors.white.withOpacity(0.25),
+          ),
+          const SizedBox(width: AppDimensions.md),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  _slots.isEmpty
+                      ? 'Nothing scheduled today'
+                      : '$takenCount of ${_slots.length} doses taken',
+                  style: const TextStyle(
+                    fontFamily: 'Poppins',
+                    fontSize: 15,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.white,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Row(
                   children: [
+                    Icon(
+                      Icons.local_fire_department,
+                      size: 18,
+                      color: Colors.orangeAccent.shade100,
+                    ),
+                    const SizedBox(width: 4),
                     Text(
-                      greeting,
+                      _streak > 0
+                          ? '$_streak day streak'
+                          : 'Start your streak today',
                       style: TextStyle(
                         fontFamily: 'Poppins',
-                        fontSize: 14,
-                        color: Colors.white.withOpacity(0.8),
+                        fontSize: 13,
+                        color: Colors.white.withOpacity(0.9),
+                        fontWeight: FontWeight.w500,
                       ),
-                    ),
-                    Text(
-                      name,
-                      style: const TextStyle(
-                        fontFamily: 'Poppins',
-                        fontSize: 20,
-                        fontWeight: FontWeight.w700,
-                        color: Colors.white,
-                      ),
-                      overflow: TextOverflow.ellipsis,
                     ),
                   ],
-                ),
-              ),
-
-              // ── History button ← NEW ───────────────
-              IconButton(
-                icon: Icon(
-                  Icons.history,
-                  color: Colors.white.withOpacity(0.9),
-                ),
-                tooltip: 'My Dose History',
-                onPressed: () {
-                  if (_medications.isEmpty) {
-                    ScaffoldMessenger.of(context)
-                        .showSnackBar(
-                      const SnackBar(
-                        content: Text(
-                          'No medicines added yet',
-                          style: TextStyle(
-                              fontFamily: 'Poppins'),
-                        ),
-                        behavior: SnackBarBehavior.floating,
-                      ),
-                    );
-                    return;
-                  }
-                  // Show history for first medicine
-                  // Patient can scroll through all
-                  final firstMed = _medications.first;
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => DoseHistoryScreen(
-                        patientId: _patient![
-                            DBConstants.patientId] as int,
-                        patientName: name,
-                        medicationName: firstMed[
-                            DBConstants.medName] as String,
-                        medicationId: firstMed[
-                            DBConstants.medId] as int,
-                      ),
-                    ),
-                  );
-                },
-              ),
-
-              // Logout
-              IconButton(
-                icon: Icon(
-                  Icons.logout,
-                  color: Colors.white.withOpacity(0.8),
-                ),
-                onPressed: () =>
-                    Navigator.pushReplacementNamed(
-                  context,
-                  '/role-selection',
-                ),
-              ),
-            ],
-          ),
-
-          const SizedBox(height: AppDimensions.lg),
-
-          // Today's date
-          Container(
-            padding: const EdgeInsets.symmetric(
-              horizontal: AppDimensions.md,
-              vertical: AppDimensions.sm,
-            ),
-            decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.15),
-              borderRadius: BorderRadius.circular(
-                AppDimensions.radiusMd,
-              ),
-            ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(
-                  Icons.calendar_today,
-                  size: 14,
-                  color: Colors.white.withOpacity(0.9),
-                ),
-                const SizedBox(width: 6),
-                Text(
-                  _getTodayDate(),
-                  style: TextStyle(
-                    fontFamily: 'Poppins',
-                    fontSize: 13,
-                    color: Colors.white.withOpacity(0.9),
-                    fontWeight: FontWeight.w500,
-                  ),
                 ),
               ],
             ),
@@ -327,112 +383,69 @@ class _PatientHomeScreenState
       ),
     );
   }
-    Widget _buildNoMedicines() => Center(
-        child: Padding(
-          padding: const EdgeInsets.all(AppDimensions.xl),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Container(
-                width: 100,
-                height: 100,
-                decoration: BoxDecoration(
-                  color: AppColors.successGreen
-                      .withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(50),
-                ),
-                child: const Icon(
-                  Icons.medication_outlined,
-                  size: 52,
-                  color: AppColors.successGreen,
-                ),
-              ),
-              const SizedBox(height: AppDimensions.lg),
-              const Text(
-                'No Medicines Yet',
-                style: TextStyle(
-                  fontFamily: 'Poppins',
-                  fontSize: 22,
-                  fontWeight: FontWeight.w700,
-                  color: AppColors.textPrimary,
-                ),
-              ),
-              const SizedBox(height: AppDimensions.sm),
-              const Text(
-                'Tap "Add Medicine" below\nto add your first medicine.',
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontFamily: 'Poppins',
-                  fontSize: 15,
-                  color: AppColors.textSecondary,
-                  height: 1.6,
-                ),
-              ),
-            ],
-          ),
-        ),
-      );
 
-  Widget _buildMedicineList() => Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Padding(
-            padding: EdgeInsets.fromLTRB(
+  void _openHistory() {
+    final name = _patient?[DBConstants.patientFullName] as String? ?? 'Patient';
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => PatientHistoryScreen(
+          patientId: _patient![DBConstants.patientId] as int,
+          patientName: name,
+        ),
+      ),
+    );
+  }
+
+  // ── Sections & cards ─────────────────────────────────────
+
+  Widget _buildSection(
+    String title,
+    IconData icon,
+    Color accent,
+    List<DoseSlot> slots,
+    DateTime now,
+  ) {
+    return SliverList(
+      delegate: SliverChildBuilderDelegate(
+        (context, index) {
+          if (index == 0) {
+            return SectionHeader(
+              title: title,
+              icon: icon,
+              count: slots.length,
+              accent: accent,
+            );
+          }
+          final slot = slots[index - 1];
+          return Padding(
+            padding: const EdgeInsets.fromLTRB(
               AppDimensions.lg,
-              AppDimensions.lg,
+              0,
               AppDimensions.lg,
               AppDimensions.sm,
             ),
-            child: Text(
-              'Your Medicines Today',
-              style: TextStyle(
-                fontFamily: 'Poppins',
-                fontSize: 18,
-                fontWeight: FontWeight.w700,
-                color: AppColors.textPrimary,
-              ),
-            ),
-          ),
-          Expanded(
-            child: ListView.builder(
-              padding: const EdgeInsets.fromLTRB(
-                AppDimensions.lg,
-                0,
-                AppDimensions.lg,
-                100,
-              ),
-              itemCount: _medications.length,
-              itemBuilder: (context, index) =>
-                  _buildMedicineCard(_medications[index]),
-            ),
-          ),
-        ],
-      );
+            child: _buildDoseCard(slot, now),
+          );
+        },
+        childCount: slots.length + 1,
+      ),
+    );
+  }
 
-  Widget _buildMedicineCard(Map<String, dynamic> med) {
-    final name =
-        med[DBConstants.medName] as String;
-    final dosage =
-        med[DBConstants.medDosage] as String;
-    final unit =
-        med[DBConstants.medDosageUnit] as String;
-    final instructions =
-        med[DBConstants.medInstructions] as String?;
-    final colorName =
-        med[DBConstants.medPillColor] as String?;
-    final shape =
-        med[DBConstants.medPillShape] as String?;
-    final photoPath =
-        med[DBConstants.medPillPhoto] as String?;
-    final pillColor = _getPillColor(colorName);
+  Widget _buildDoseCard(DoseSlot slot, DateTime now) {
+    final med = slot.medication;
+    final name = slot.medicationName;
+    final dosage = med[DBConstants.medDosage] as String? ?? '';
+    final unit = med[DBConstants.medDosageUnit] as String? ?? '';
+    final instructions = med[DBConstants.medInstructions] as String?;
+    final bucket = slot.bucket(now);
+    final timeLabel = _formatTime(slot.scheduledTime);
 
     return Container(
-      margin: const EdgeInsets.only(
-          bottom: AppDimensions.md),
       decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius:
-            BorderRadius.circular(AppDimensions.radiusLg),
+        color: Theme.of(context).cardColor,
+        borderRadius: BorderRadius.circular(AppDimensions.radiusLg),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withOpacity(0.06),
@@ -445,46 +458,77 @@ class _PatientHomeScreenState
         padding: const EdgeInsets.all(AppDimensions.md),
         child: Row(
           children: [
-            _buildPillVisual(
-              photoPath: photoPath,
-              shape: shape ?? 'tablet',
-              color: pillColor,
+            PillVisual(
+              shape: med[DBConstants.medPillShape] as String?,
+              colorName: med[DBConstants.medPillColor] as String?,
+              photoPath: med[DBConstants.medPillPhoto] as String?,
+              size: 64,
+              animate: bucket == DoseBucket.dueNow,
             ),
             const SizedBox(width: AppDimensions.md),
             Expanded(
               child: Column(
-                crossAxisAlignment:
-                    CrossAxisAlignment.start,
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  Row(
+                    children: [
+                      Icon(
+                        Icons.access_time,
+                        size: 14,
+                        color: Theme.of(context)
+                            .colorScheme
+                            .onSurface
+                            .withOpacity(0.5),
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        timeLabel,
+                        style: TextStyle(
+                          fontFamily: 'Poppins',
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: Theme.of(context)
+                              .colorScheme
+                              .onSurface
+                              .withOpacity(0.6),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 2),
                   Text(
                     name,
                     style: const TextStyle(
                       fontFamily: 'Poppins',
                       fontSize: 17,
                       fontWeight: FontWeight.w700,
-                      color: AppColors.textPrimary,
                     ),
                   ),
-                  const SizedBox(height: 4),
+                  const SizedBox(height: 2),
                   Text(
-                    '$dosage $unit',
-                    style: const TextStyle(
+                    '$dosage $unit'.trim(),
+                    style: TextStyle(
                       fontFamily: 'Poppins',
-                      fontSize: 15,
-                      color: AppColors.textSecondary,
+                      fontSize: 14,
                       fontWeight: FontWeight.w500,
+                      color: Theme.of(context)
+                          .colorScheme
+                          .onSurface
+                          .withOpacity(0.6),
                     ),
                   ),
-                  if (instructions != null &&
-                      instructions.isNotEmpty) ...[
-                    const SizedBox(height: 4),
+                  if (instructions != null && instructions.isNotEmpty) ...[
+                    const SizedBox(height: 2),
                     Text(
                       instructions,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontFamily: 'Poppins',
-                        fontSize: 13,
-                        color: AppColors.textSecondary,
+                        fontSize: 12,
                         fontStyle: FontStyle.italic,
+                        color: Theme.of(context)
+                            .colorScheme
+                            .onSurface
+                            .withOpacity(0.55),
                       ),
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
@@ -494,65 +538,58 @@ class _PatientHomeScreenState
               ),
             ),
             const SizedBox(width: AppDimensions.sm),
-            GestureDetector(
-              onTap: () => Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => DoseConfirmationScreen(
-                    medication: med,
-                    patientId: _patient![
-                        DBConstants.patientId] as int,
-                    patientName: _patient![
-                        DBConstants.patientFullName]
-                        as String,
-                  ),
-                ),
-              ).then((_) => _loadPatientData()),
-              child: Container(
-                width: 64,
-                height: 64,
-                decoration: BoxDecoration(
-                  gradient: const LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: [
-                      Color(0xFF43A047),
-                      Color(0xFF2E7D32),
-                    ],
-                  ),
-                  borderRadius: BorderRadius.circular(
-                    AppDimensions.radiusMd,
-                  ),
-                  boxShadow: [
-                    BoxShadow(
-                      color: AppColors.successGreen
-                          .withOpacity(0.4),
-                      blurRadius: 8,
-                      offset: const Offset(0, 3),
-                    ),
-                  ],
-                ),
-                child: const Column(
-                  mainAxisAlignment:
-                      MainAxisAlignment.center,
-                  children: [
-                    Icon(
-                      Icons.check_circle_outline,
-                      color: Colors.white,
-                      size: 24,
-                    ),
-                    SizedBox(height: 2),
-                    Text(
-                      'TAKE',
-                      style: TextStyle(
-                        fontFamily: 'Poppins',
-                        fontSize: 12,
-                        fontWeight: FontWeight.w700,
-                        color: Colors.white,
-                      ),
-                    ),
-                  ],
-                ),
+            _buildTrailing(slot, bucket),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTrailing(DoseSlot slot, DoseBucket bucket) {
+    if (bucket == DoseBucket.taken) {
+      return const _StatusBadge(
+        icon: Icons.check_circle,
+        label: 'Taken',
+        color: AppColors.successGreen,
+      );
+    }
+    if (bucket == DoseBucket.missed) {
+      final skipped = slot.status == DBConstants.statusSkipped;
+      return _StatusBadge(
+        icon: skipped ? Icons.remove_circle_outline : Icons.cancel,
+        label: skipped ? 'Skipped' : 'Missed',
+        color: AppColors.dangerRed,
+      );
+    }
+    // Due now or upcoming → actionable TAKE button.
+    return GestureDetector(
+      onTap: () => _openDose(slot),
+      child: Container(
+        width: 64,
+        height: 64,
+        decoration: BoxDecoration(
+          gradient: AppColors.patientGreenGradient,
+          borderRadius: BorderRadius.circular(AppDimensions.radiusMd),
+          boxShadow: [
+            BoxShadow(
+              color: AppColors.successGreen.withOpacity(0.4),
+              blurRadius: 8,
+              offset: const Offset(0, 3),
+            ),
+          ],
+        ),
+        child: const Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.check_circle_outline, color: Colors.white, size: 24),
+            SizedBox(height: 2),
+            Text(
+              'TAKE',
+              style: TextStyle(
+                fontFamily: 'Poppins',
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+                color: Colors.white,
               ),
             ),
           ],
@@ -561,306 +598,125 @@ class _PatientHomeScreenState
     );
   }
 
-  Widget _buildPillVisual({
-    required String? photoPath,
-    required String shape,
-    required Color color,
-  }) {
-    if (photoPath != null && photoPath.isNotEmpty) {
-      final file = File(photoPath);
-      if (file.existsSync()) {
-        return Container(
-          width: 70,
-          height: 70,
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(
-              AppDimensions.radiusMd,
-            ),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.1),
-                blurRadius: 6,
-                offset: const Offset(0, 2),
-              ),
-            ],
-            image: DecorationImage(
-              image: FileImage(file),
-              fit: BoxFit.cover,
-            ),
-          ),
-        );
-      }
-    }
-    return _PatientPillWidget(shape: shape, color: color);
+  void _openDose(DoseSlot slot) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => DoseConfirmationScreen(
+          medication: slot.medication,
+          patientId: _patient![DBConstants.patientId] as int,
+          patientName:
+              _patient![DBConstants.patientFullName] as String? ?? 'Patient',
+          scheduledTime: slot.scheduledTime.toIso8601String(),
+        ),
+      ),
+    ).then((_) => _loadPatientData());
   }
 
-  Color _getPillColor(String? colorName) {
-    switch (colorName?.toLowerCase()) {
-      case 'red':    return AppColors.pillRed;
-      case 'blue':   return AppColors.pillBlue;
-      case 'green':  return AppColors.pillGreen;
-      case 'yellow': return AppColors.pillYellow;
-      case 'orange': return AppColors.pillOrange;
-      case 'purple': return AppColors.pillPurple;
-      case 'pink':   return AppColors.pillPink;
-      case 'white':  return AppColors.pillWhite;
-      case 'brown':  return AppColors.pillBrown;
-      default:       return AppColors.primaryBlue;
-    }
-  }
+  // ── Empty states ─────────────────────────────────────────
 
-  String _getTodayDate() {
-    final now = DateTime.now();
-    const months = [
-      'January','February','March','April',
-      'May','June','July','August',
-      'September','October','November','December',
-    ];
-    const days = [
-      'Monday','Tuesday','Wednesday','Thursday',
-      'Friday','Saturday','Sunday',
-    ];
-    final day   = days[now.weekday - 1];
-    final month = months[now.month - 1];
-    return '$day, ${now.day} $month ${now.year}';
+  Widget _buildNoMedicines() => _EmptyState(
+        icon: Icons.medication_outlined,
+        title: 'No Medicines Yet',
+        message: 'Tap "Add Medicine" below\nto add your first medicine.',
+      );
+
+  Widget _buildNothingToday() => const _EmptyState(
+        icon: Icons.event_available,
+        title: 'All clear for today',
+        message: 'No doses are scheduled for today.\nEnjoy your day!',
+      );
+
+  String _formatTime(DateTime t) {
+    final h = t.hour % 12 == 0 ? 12 : t.hour % 12;
+    final m = t.minute.toString().padLeft(2, '0');
+    final ampm = t.hour < 12 ? 'AM' : 'PM';
+    return '$h:$m $ampm';
   }
 }
 
-// ══════════════════════════════════════════════════════════
-// Animated Pill Widget — unchanged
-// ══════════════════════════════════════════════════════════
-class _PatientPillWidget extends StatefulWidget {
-  const _PatientPillWidget({
-    required this.shape,
+class _StatusBadge extends StatelessWidget {
+  const _StatusBadge({
+    required this.icon,
+    required this.label,
     required this.color,
   });
-  final String shape;
+  final IconData icon;
+  final String label;
   final Color color;
 
   @override
-  State<_PatientPillWidget> createState() =>
-      _PatientPillWidgetState();
+  Widget build(BuildContext context) => Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, color: color, size: 26),
+          const SizedBox(height: 2),
+          Text(
+            label,
+            style: TextStyle(
+              fontFamily: 'Poppins',
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+              color: color,
+            ),
+          ),
+        ],
+      );
 }
 
-class _PatientPillWidgetState
-    extends State<_PatientPillWidget>
-    with SingleTickerProviderStateMixin {
-  late AnimationController _controller;
-  late Animation<double> _float;
+class _EmptyState extends StatelessWidget {
+  const _EmptyState({
+    required this.icon,
+    required this.title,
+    required this.message,
+  });
+  final IconData icon;
+  final String title;
+  final String message;
 
   @override
-  void initState() {
-    super.initState();
-    _controller = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 2000),
-    )..repeat(reverse: true);
-    _float = Tween<double>(begin: -3, end: 3).animate(
-      CurvedAnimation(
-          parent: _controller, curve: Curves.easeInOut),
-    );
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) => AnimatedBuilder(
-        animation: _float,
-        builder: (context, child) => Transform.translate(
-          offset: Offset(0, _float.value),
-          child: child,
-        ),
-        child: Container(
-          width: 70, height: 70,
-          decoration: BoxDecoration(
-            color: widget.color.withOpacity(0.12),
-            borderRadius: BorderRadius.circular(
-                AppDimensions.radiusMd),
-            border: Border.all(
-              color: widget.color.withOpacity(0.3),
-              width: 1.5,
-            ),
-          ),
-          child: Center(child: _buildShape()),
-        ),
-      );
-
-  Widget _buildShape() {
-    switch (widget.shape.toLowerCase()) {
-      case 'capsule':   return _buildCapsule();
-      case 'syrup':
-      case 'liquid':    return _buildBottle();
-      case 'drops':     return _buildDrop();
-      case 'inhaler':   return _buildInhaler();
-      case 'injection': return _buildInjection();
-      case 'patch':     return _buildPatch();
-      case 'tablet':
-      default:          return _buildTablet();
-    }
-  }
-
-  Widget _buildTablet() => Container(
-        width: 42, height: 42,
-        decoration: BoxDecoration(
-          color: widget.color, shape: BoxShape.circle,
-          boxShadow: [BoxShadow(
-            color: widget.color.withOpacity(0.5),
-            blurRadius: 8, offset: const Offset(0, 3),
-          )],
-        ),
-        child: Center(child: Container(
-          width: 28, height: 2.5,
-          decoration: BoxDecoration(
-            color: Colors.white.withOpacity(0.7),
-            borderRadius: BorderRadius.circular(2),
-          ),
-        )),
-      );
-
-  Widget _buildCapsule() => Container(
-        width: 46, height: 22,
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(11),
-          boxShadow: [BoxShadow(
-            color: widget.color.withOpacity(0.4),
-            blurRadius: 6, offset: const Offset(0, 2),
-          )],
-        ),
-        clipBehavior: Clip.antiAlias,
-        child: Row(children: [
-          Expanded(child: Container(color: widget.color)),
-          Expanded(child: Container(
-            color: widget.color.withOpacity(0.45))),
-        ]),
-      );
-
-  Widget _buildBottle() => Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(width: 14, height: 8,
-            decoration: BoxDecoration(
-              color: widget.color,
-              borderRadius: BorderRadius.circular(3),
-            )),
-          Container(width: 30, height: 34,
-            decoration: BoxDecoration(
-              color: widget.color.withOpacity(0.85),
-              borderRadius: BorderRadius.circular(7),
-              boxShadow: [BoxShadow(
-                color: widget.color.withOpacity(0.3),
-                blurRadius: 6, offset: const Offset(0, 2),
-              )],
-            ),
-            child: Padding(padding: const EdgeInsets.all(5),
-              child: Container(decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.25),
-                borderRadius: BorderRadius.circular(4),
-              )))),
-        ],
-      );
-
-  Widget _buildDrop() => CustomPaint(
-        size: const Size(30, 42),
-        painter: _DropPainter(color: widget.color),
-      );
-
-  Widget _buildInhaler() => Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(width: 12, height: 7,
-            decoration: BoxDecoration(
-              color: widget.color.withOpacity(0.6),
-              borderRadius: BorderRadius.circular(3),
-            )),
-          Container(width: 26, height: 32,
-            decoration: BoxDecoration(
-              color: widget.color,
-              borderRadius: BorderRadius.circular(8),
-              boxShadow: [BoxShadow(
-                color: widget.color.withOpacity(0.3),
-                blurRadius: 6, offset: const Offset(0, 2),
-              )],
-            )),
-        ],
-      );
-
-  Widget _buildInjection() => Transform.rotate(
-        angle: -0.5,
-        child: Row(mainAxisSize: MainAxisSize.min, children: [
-          Container(width: 5, height: 5,
-            decoration: BoxDecoration(
-              color: Colors.grey.shade400,
-              borderRadius: BorderRadius.circular(2),
-            )),
-          Container(width: 30, height: 13,
-            decoration: BoxDecoration(
-              color: widget.color.withOpacity(0.25),
-              border: Border.all(
-                  color: widget.color, width: 1.5),
-              borderRadius: BorderRadius.circular(3),
-            ),
-            child: Align(alignment: Alignment.centerLeft,
-              child: Container(width: 15,
+  Widget build(BuildContext context) => Center(
+        child: Padding(
+          padding: const EdgeInsets.all(AppDimensions.xl),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Container(
+                width: 100,
+                height: 100,
                 decoration: BoxDecoration(
-                  color: widget.color.withOpacity(0.6),
-                  borderRadius: BorderRadius.circular(2),
-                )))),
-          Container(width: 9, height: 9,
-            decoration: BoxDecoration(
-              color: widget.color,
-              borderRadius: BorderRadius.circular(2),
-            )),
-        ]),
-      );
-
-  Widget _buildPatch() => Container(
-        width: 42, height: 42,
-        decoration: BoxDecoration(
-          color: widget.color.withOpacity(0.2),
-          borderRadius: BorderRadius.circular(7),
-          border: Border.all(color: widget.color, width: 2.5),
-        ),
-        child: Center(child: Container(
-          width: 22, height: 22,
-          decoration: BoxDecoration(
-            color: widget.color.withOpacity(0.5),
-            borderRadius: BorderRadius.circular(4),
+                  color: AppColors.successGreen.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(50),
+                ),
+                child: Icon(
+                  icon,
+                  size: 52,
+                  color: AppColors.successGreen,
+                ),
+              ),
+              const SizedBox(height: AppDimensions.lg),
+              Text(
+                title,
+                style: const TextStyle(
+                  fontFamily: 'Poppins',
+                  fontSize: 22,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(height: AppDimensions.sm),
+              Text(
+                message,
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontFamily: 'Poppins',
+                  fontSize: 15,
+                  height: 1.6,
+                  color:
+                      Theme.of(context).colorScheme.onSurface.withOpacity(0.6),
+                ),
+              ),
+            ],
           ),
-        )),
+        ),
       );
-}
-
-class _DropPainter extends CustomPainter {
-  _DropPainter({required this.color});
-  final Color color;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..color = color
-      ..style = PaintingStyle.fill;
-    final path = Path();
-    path.moveTo(size.width / 2, 0);
-    path.quadraticBezierTo(
-        size.width, size.height * 0.5,
-        size.width / 2, size.height);
-    path.quadraticBezierTo(
-        0, size.height * 0.5,
-        size.width / 2, 0);
-    canvas.drawPath(path, paint);
-    canvas.drawCircle(
-      Offset(size.width * 0.35, size.height * 0.3), 4,
-      Paint()
-        ..color = Colors.white.withOpacity(0.45)
-        ..style = PaintingStyle.fill,
-    );
-  }
-
-  @override
-  bool shouldRepaint(_DropPainter old) =>
-      old.color != color;
 }

@@ -100,4 +100,5 @@ class DBConstants {
   static const String keyAdminPin = 'admin_pin';
   static const String keyDefaultLanguage = 'default_language';
   static const String keyMissedDoseDelay = 'missed_dose_delay_minutes';
+  static const String keyThemeMode = 'theme_mode';
 }
