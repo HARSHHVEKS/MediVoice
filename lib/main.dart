@@ -6,6 +6,7 @@ import 'core/navigation/app_navigator.dart';
 import 'core/services/notification_service.dart'; // ← NEW
 import 'core/services/tts_service.dart'; // ← NEW
 import 'core/theme/app_theme.dart';
+import 'core/theme/theme_controller.dart';
 import 'features/auth/screens/admin_login_screen.dart';
 import 'features/auth/screens/role_selection_screen.dart';
 import 'features/caregiver/screens/add_patient_screen.dart';
@@ -34,6 +35,9 @@ void main() async {
   // Initialize text-to-speech (spoken reminders) ← NEW
   await TtsService.instance.initialize();
 
+  // Load persisted theme preference ← NEW
+  await ThemeController.instance.load();
+
   runApp(const MediVoiceApp());
 
   WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -45,23 +49,29 @@ class MediVoiceApp extends StatelessWidget {
   const MediVoiceApp({super.key});
 
   @override
-  Widget build(BuildContext context) => MaterialApp(
-        navigatorKey: appNavigatorKey,
-        title: 'MediVoice',
-        theme: AppTheme.lightTheme,
-        debugShowCheckedModeBanner: false,
-        initialRoute: '/',
-        routes: {
-          '/': (context) => const SplashScreen(),
-          '/role-selection': (context) => const RoleSelectionScreen(),
-          '/patient-register': (context) => const PatientRegisterScreen(),
-          '/patient-home': (context) => const PatientHomeScreen(),
-          '/caregiver-profiles': (context) => const CaregiverProfilesScreen(),
-          '/add-patient': (context) => const AddPatientScreen(),
-          '/admin-login': (context) => const AdminLoginScreen(),
-        },
-        onUnknownRoute: (settings) => MaterialPageRoute(
-          builder: (_) => const RoleSelectionScreen(),
+  Widget build(BuildContext context) => ValueListenableBuilder<ThemeMode>(
+        valueListenable: ThemeController.instance.mode,
+        builder: (context, themeMode, _) => MaterialApp(
+          navigatorKey: appNavigatorKey,
+          title: 'MediVoice',
+          theme: AppTheme.lightTheme,
+          darkTheme: AppTheme.darkTheme,
+          themeMode: themeMode,
+          debugShowCheckedModeBanner: false,
+          initialRoute: '/',
+          routes: {
+            '/': (context) => const SplashScreen(),
+            '/role-selection': (context) => const RoleSelectionScreen(),
+            '/patient-register': (context) => const PatientRegisterScreen(),
+            '/patient-home': (context) => const PatientHomeScreen(),
+            '/caregiver-profiles': (context) =>
+                const CaregiverProfilesScreen(),
+            '/add-patient': (context) => const AddPatientScreen(),
+            '/admin-login': (context) => const AdminLoginScreen(),
+          },
+          onUnknownRoute: (settings) => MaterialPageRoute(
+            builder: (_) => const RoleSelectionScreen(),
+          ),
         ),
       );
 }

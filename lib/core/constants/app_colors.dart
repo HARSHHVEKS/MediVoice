@@ -19,6 +19,13 @@ class AppColors {
   // Admin Dark Theme
   static const Color adminNavy = Color(0xFF0A1628);
 
+  // Dark Theme surfaces
+  static const Color darkBackground = Color(0xFF0E1420);
+  static const Color darkSurface = Color(0xFF17202E);
+  static const Color darkSurfaceAlt = Color(0xFF1F2A3A);
+  static const Color darkTextPrimary = Color(0xFFECEFF4);
+  static const Color darkTextSecondary = Color(0xFF9AA5B5);
+
   // Pill Colors
   static const Color pillRed = Color(0xFFEF5350);
   static const Color pillBlue = Color(0xFF42A5F5);
@@ -47,5 +54,22 @@ class AppColors {
     begin: Alignment.topLeft,
     end: Alignment.bottomRight,
     colors: [Color(0xFFC62828), Color(0xFF7F0000)],
+  );
+
+  // Patient-facing green gradient (was hardcoded across screens)
+  static const Color patientGreenLight = Color(0xFF43A047);
+  static const Color patientGreenMid = Color(0xFF2E7D32);
+  static const Color patientGreenDark = Color(0xFF1B5E20);
+
+  static const LinearGradient patientGreenGradient = LinearGradient(
+    begin: Alignment.topLeft,
+    end: Alignment.bottomRight,
+    colors: [patientGreenLight, patientGreenMid],
+  );
+
+  static const LinearGradient patientGreenGradientDeep = LinearGradient(
+    begin: Alignment.topLeft,
+    end: Alignment.bottomRight,
+    colors: [patientGreenLight, patientGreenMid, patientGreenDark],
   );
 }

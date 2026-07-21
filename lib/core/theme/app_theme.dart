@@ -141,4 +141,140 @@ class AppTheme {
         ),
       ),
     );
+
+  static ThemeData get darkTheme => ThemeData(
+      useMaterial3: true,
+      brightness: Brightness.dark,
+      fontFamily: 'Poppins',
+      colorScheme: ColorScheme.fromSeed(
+        seedColor: AppColors.primaryBlue,
+        brightness: Brightness.dark,
+        primary: AppColors.primaryLight,
+        secondary: AppColors.pillGreen,
+        error: AppColors.pillRed,
+        // ignore: deprecated_member_use
+        background: AppColors.darkBackground,
+        surface: AppColors.darkSurface,
+      ),
+
+      appBarTheme: const AppBarTheme(
+        backgroundColor: AppColors.darkSurface,
+        foregroundColor: AppColors.darkTextPrimary,
+        elevation: 0,
+        centerTitle: false,
+        titleTextStyle: TextStyle(
+          fontFamily: 'Poppins',
+          fontSize: AppDimensions.fontXl,
+          fontWeight: FontWeight.w600,
+          color: AppColors.darkTextPrimary,
+        ),
+      ),
+
+      scaffoldBackgroundColor: AppColors.darkBackground,
+
+      cardTheme: CardThemeData(
+        elevation: 0,
+        color: AppColors.darkSurface,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AppDimensions.radiusLg),
+        ),
+        margin: const EdgeInsets.only(bottom: AppDimensions.md),
+      ),
+
+      elevatedButtonTheme: ElevatedButtonThemeData(
+        style: ElevatedButton.styleFrom(
+          backgroundColor: AppColors.primaryLight,
+          foregroundColor: Colors.black,
+          minimumSize: const Size(
+            double.infinity,
+            AppDimensions.buttonStandard,
+          ),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(AppDimensions.radiusMd),
+          ),
+          textStyle: const TextStyle(
+            fontFamily: 'Poppins',
+            fontSize: AppDimensions.fontLg,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+      ),
+
+      inputDecorationTheme: InputDecorationTheme(
+        filled: true,
+        fillColor: AppColors.darkSurfaceAlt,
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: AppDimensions.md,
+          vertical: AppDimensions.md,
+        ),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(AppDimensions.radiusMd),
+          borderSide: const BorderSide(color: Color(0xFF2C3A4E)),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(AppDimensions.radiusMd),
+          borderSide: const BorderSide(color: Color(0xFF2C3A4E)),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(AppDimensions.radiusMd),
+          borderSide: const BorderSide(
+            color: AppColors.primaryLight,
+            width: 2,
+          ),
+        ),
+        labelStyle: const TextStyle(
+          fontFamily: 'Poppins',
+          color: AppColors.darkTextSecondary,
+          fontSize: AppDimensions.fontMd,
+        ),
+        hintStyle: const TextStyle(
+          fontFamily: 'Poppins',
+          color: AppColors.darkTextSecondary,
+          fontSize: AppDimensions.fontMd,
+        ),
+      ),
+
+      textTheme: const TextTheme(
+        displayLarge: TextStyle(
+          fontFamily: 'Poppins',
+          fontSize: 48,
+          fontWeight: FontWeight.w700,
+          color: AppColors.darkTextPrimary,
+        ),
+        headlineLarge: TextStyle(
+          fontFamily: 'Poppins',
+          fontSize: AppDimensions.fontHuge,
+          fontWeight: FontWeight.w700,
+          color: AppColors.darkTextPrimary,
+        ),
+        headlineMedium: TextStyle(
+          fontFamily: 'Poppins',
+          fontSize: AppDimensions.fontXxl,
+          fontWeight: FontWeight.w700,
+          color: AppColors.darkTextPrimary,
+        ),
+        titleLarge: TextStyle(
+          fontFamily: 'Poppins',
+          fontSize: AppDimensions.fontXl,
+          fontWeight: FontWeight.w600,
+          color: AppColors.darkTextPrimary,
+        ),
+        titleMedium: TextStyle(
+          fontFamily: 'Poppins',
+          fontSize: AppDimensions.fontLg,
+          fontWeight: FontWeight.w600,
+          color: AppColors.darkTextPrimary,
+        ),
+        bodyLarge: TextStyle(
+          fontFamily: 'Poppins',
+          fontSize: AppDimensions.fontMd,
+          color: AppColors.darkTextPrimary,
+        ),
+        bodyMedium: TextStyle(
+          fontFamily: 'Poppins',
+          fontSize: AppDimensions.fontSm,
+          color: AppColors.darkTextSecondary,
+        ),
+      ),
+    );
 }
